@@ -423,6 +423,46 @@ func TestUpsertLocationAndTeamRadio(t *testing.T) {
 	}
 }
 
+func TestSessionTimeline(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test", DateStart: now, SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race", DateStart: now, DateEnd: now.Add(time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	driver := 4
+	if err := db.UpsertRaceControl(context.Background(), []domain.RaceControlEvent{{Timestamp: now,
+		SessionKey: 200, MeetingKey: 100, Category: "Flag", Message: "Yellow", DriverNumber: &driver}}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertOvertakes(context.Background(), []domain.Overtake{{Timestamp: now.Add(time.Second),
+		SessionKey: 200, MeetingKey: 100, DriverNumber: 4, OvertakenDriverNumber: 5, Position: 3}}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertWeather(context.Background(), []domain.WeatherSample{{Timestamp: now.Add(2 * time.Second),
+		SessionKey: 200, MeetingKey: 100}}, now); err != nil {
+		t.Fatal(err)
+	}
+	events, truncated, err := db.SessionTimeline(context.Background(), domain.SessionTimelineQuery{SessionKey: 200,
+		Types: []string{domain.TimelineRaceControl, domain.TimelineOvertake, domain.TimelineWeather}, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || len(events) != 3 || events[0].Type != domain.TimelineRaceControl || events[2].Type != domain.TimelineWeather {
+		t.Fatalf("events=%+v truncated=%v", events, truncated)
+	}
+	filtered, _, err := db.SessionTimeline(context.Background(), domain.SessionTimelineQuery{SessionKey: 200,
+		DriverNumber: &driver, Types: []string{domain.TimelineOvertake}, Limit: 10})
+	if err != nil || len(filtered) != 1 {
+		t.Fatalf("filtered=%+v err=%v", filtered, err)
+	}
+}
+
 func TestSaveAndReadDriverRoster(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

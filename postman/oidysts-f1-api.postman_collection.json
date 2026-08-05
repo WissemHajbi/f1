@@ -38,6 +38,7 @@
     { "key": "lapNumber", "value": "10", "type": "string" },
     { "key": "raceControlCategory", "value": "Flag", "type": "string" },
     { "key": "teamRadioId", "value": "f4af4ff71aacf65f35b7132d2c10e7c4b115dc82094ab01a2c56377f3b01257a", "type": "string" },
+    { "key": "timelineTypes", "value": "race_control,overtake,pit_stop,position,stint,team_radio,weather", "type": "string" },
     { "key": "from", "value": "2025-12-07T13:00:00Z", "type": "string" },
     { "key": "to", "value": "2025-12-07T13:01:00Z", "type": "string" },
     { "key": "limit", "value": "1000", "type": "string" }
@@ -465,6 +466,26 @@
               "host": ["{{baseUrl}}"], "path": ["v1", "team-radio", "{{teamRadioId}}", "audio"]
             },
             "description": "Streams locally cached audio with byte-range support; it never contacts OpenF1."
+          }
+        },
+        {
+          "name": "Unified Session Timeline",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/session-timeline?session_key={{sessionKey}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "session-timeline"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional driver filter; excludes global events without a driver.", "disabled": true },
+                { "key": "types", "value": "{{timelineTypes}}", "description": "Optional comma-separated event types: race_control, overtake, pit_stop, position, stint, team_radio, weather.", "disabled": true },
+                { "key": "from", "value": "{{from}}", "description": "Optional inclusive RFC3339 start timestamp.", "disabled": true },
+                { "key": "to", "value": "{{to}}", "description": "Optional inclusive RFC3339 end timestamp.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Optional result limit, 1–5000. Default: 1000." }
+              ]
+            },
+            "description": "Returns one chronological feed assembled only from synchronized SQLite data. Location, car data, and intervals remain separate due to volume."
           }
         }
       ]

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"oidysts/internal/domain"
@@ -46,6 +47,7 @@ func New(db *store.Store, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /v1/overtakes", s.overtakes)
 	mux.HandleFunc("GET /v1/positions", s.positions)
 	mux.HandleFunc("GET /v1/intervals", s.intervals)
+	mux.HandleFunc("GET /v1/session-timeline", s.sessionTimeline)
 	return requestLog(logger, mux)
 }
 
@@ -89,6 +91,59 @@ func (s *Server) drivers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": roster.Drivers, "meta": map[string]any{
 		"season": roster.Session.Year, "session": roster.Session, "synced_at": roster.SyncedAt,
 	}})
+}
+
+func (s *Server) sessionTimeline(w http.ResponseWriter, r *http.Request) {
+	base, err := timelineQuery(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	types, err := timelineTypes(r.URL.Query().Get("types"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	events, truncated, err := s.store.SessionTimeline(r.Context(), domain.SessionTimelineQuery{SessionKey: base.SessionKey,
+		DriverNumber: base.DriverNumber, Types: types, From: base.From, To: base.To, Limit: base.Limit})
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "timeline events not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list session timeline", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": events, "meta": map[string]any{"session_key": base.SessionKey,
+		"types": types, "count": len(events), "truncated": truncated}})
+}
+
+func timelineTypes(value string) ([]string, error) {
+	if strings.TrimSpace(value) == "" {
+		return append([]string(nil), domain.TimelineTypes...), nil
+	}
+	allowed := make(map[string]struct{}, len(domain.TimelineTypes))
+	for _, item := range domain.TimelineTypes {
+		allowed[item] = struct{}{}
+	}
+	seen := map[string]struct{}{}
+	result := []string{}
+	for _, item := range strings.Split(value, ",") {
+		item = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(item)), "-", "_")
+		if _, ok := allowed[item]; !ok {
+			return nil, errors.New("types must contain only race_control, overtake, pit_stop, position, stint, team_radio, or weather")
+		}
+		if _, duplicate := seen[item]; duplicate {
+			continue
+		}
+		seen[item] = struct{}{}
+		result = append(result, item)
+	}
+	if len(result) == 0 {
+		return nil, errors.New("types cannot be empty")
+	}
+	return result, nil
 }
 
 func (s *Server) overtakes(w http.ResponseWriter, r *http.Request) {
