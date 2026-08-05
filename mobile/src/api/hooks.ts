@@ -16,4 +16,10 @@ export const queries = {
     queryFn: () => api.constructorStandings(season),
     staleTime: 10 * 60_000,
   }),
+  raceResult: (round: number, season = DEFAULT_SEASON) => ({
+    queryKey: ['results', season, round],
+    queryFn: () => api.raceResult(round, season),
+    staleTime: 60 * 60_000,
+    enabled: Number.isInteger(round) && round > 0,
+  }),
 };

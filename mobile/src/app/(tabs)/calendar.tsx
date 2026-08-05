@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
 
 import { DEFAULT_SEASON } from '@/api/client';
@@ -28,11 +29,14 @@ export default function CalendarScreen() {
     {query.data?.map((event) => {
       const date = dateParts(event.race_at);
       const complete = event.race_at ? new Date(event.race_at).getTime() < renderedAt : false;
-      return <Card key={event.round} accent={complete ? colors.borderStrong : colors.red} style={styles.raceCard}>
+      return <Pressable key={event.round} accessibilityRole="button" accessibilityLabel={`Open ${event.name} results`}
+        onPress={() => router.push({ pathname: '/race/[round]', params: { round: event.round } })}>
+        <Card accent={complete ? colors.borderStrong : colors.red} style={styles.raceCard}>
           <View style={styles.round}><Text style={styles.roundLabel}>R{String(event.round).padStart(2, '0')}</Text><Text style={styles.day}>{date.day}</Text><Text style={styles.month}>{date.month}</Text></View>
           <View style={styles.raceInfo}><Text style={styles.country}>{event.circuit.country}</Text><Text numberOfLines={1} style={styles.name}>{event.name}</Text><View style={styles.location}><MaterialCommunityIcons name="map-marker-outline" color={colors.textDim} size={14} /><Text style={typography.muted}>{event.circuit.locality} · {event.circuit.name}</Text></View></View>
-          <MaterialCommunityIcons name={complete ? 'check-circle-outline' : 'timer-sand'} color={complete ? colors.textDim : colors.red} size={21} />
-        </Card>;
+          <MaterialCommunityIcons name="chevron-right" color={complete ? colors.textDim : colors.red} size={21} />
+        </Card>
+      </Pressable>;
     })}
   </Screen>;
 }

@@ -4,13 +4,14 @@ A deliberately small Expo SDK 54 + TypeScript client for the local Formula 1 API
 
 ## Current scope
 
-Only three validated MVP screens are included:
+The validated MVP is intentionally narrow:
 
 - Home: latest result and championship leaders
 - Calendar: complete synchronized season schedule
 - Standings: driver and constructor classification
+- Race Details: circuit summary and final classification, opened from Calendar
 
-Race details, drivers, team radio, and track replay are intentionally deferred. They will be added one vertical feature at a time after this foundation is tested on a real device.
+Drivers, team radio, timelines, and track replay are intentionally deferred. They will be added one vertical feature at a time.
 
 ## Start
 

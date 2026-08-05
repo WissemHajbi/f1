@@ -39,4 +39,7 @@ export const api = {
   constructorStandings: (season = DEFAULT_SEASON) =>
     get<ApiEnvelope<ConstructorStanding[]>>(`/v1/standings/constructors${seasonQuery(season)}`).then((value) => value.data),
   latestResult: () => get<ApiEnvelope<RaceClassification>>('/v1/results/latest').then((value) => value.data),
+  raceResult: (round: number, season = DEFAULT_SEASON) =>
+    get<ApiEnvelope<RaceClassification[]>>(`/v1/results?season=${encodeURIComponent(season)}&round=${encodeURIComponent(round)}`)
+      .then((value) => value.data[0]),
 };

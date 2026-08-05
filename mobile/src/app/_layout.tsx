@@ -23,8 +23,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'slide_from_right' }}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="race/[round]" />
         </Stack>
       </QueryClientProvider>
     </SafeAreaProvider>
