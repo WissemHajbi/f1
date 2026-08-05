@@ -19,12 +19,12 @@ import (
 func main() {
 	var resource string
 	var year int
-	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers or calendar")
+	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, calendar, or standings")
 	flag.IntVar(&year, "year", 2025, "season to sync")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if resource != "drivers" && resource != "calendar" {
+	if resource != "drivers" && resource != "calendar" && resource != "standings" {
 		logger.Error("unsupported resource", "resource", resource)
 		os.Exit(2)
 	}
@@ -44,6 +44,8 @@ func main() {
 		err = syncDrivers(ctx, db, upstream, year)
 	case "calendar":
 		err = syncCalendar(ctx, db, upstream, year)
+	case "standings":
+		err = syncStandings(ctx, db, upstream, year)
 	}
 	if err != nil {
 		logger.Error("sync failed", "resource", resource, "year", year, "error", err)
@@ -75,6 +77,36 @@ func syncDrivers(ctx context.Context, db *store.Store, upstream *fetch.Client, y
 	fmt.Printf("SYNC drivers season=%d session=%d (%s) records=%d\n", year, result.Roster.Session.Key,
 		result.Roster.Session.Location, len(result.Roster.Drivers))
 	return nil
+}
+
+func syncStandings(ctx context.Context, db *store.Store, upstream *fetch.Client, year int) error {
+	result, err := jolpica.New(upstream).Standings(ctx, year)
+	if err != nil {
+		return err
+	}
+	if err := db.ReplaceStandings(ctx, year, result.Drivers, result.Constructors); err != nil {
+		return err
+	}
+	syncedAt := result.Drivers[0].SyncedAt
+	for _, snapshot := range []store.Snapshot{
+		{Source: "jolpica", Resource: "driver_standings_sync", Endpoint: result.DriversEndpoint, FetchedAt: syncedAt,
+			StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Drivers), PayloadBytes: len(result.DriversPayload),
+			Summary: mustJSON(map[string]any{"season": year, "standings": len(result.Drivers)}), Payload: result.DriversPayload},
+		{Source: "jolpica", Resource: "constructor_standings_sync", Endpoint: result.ConstructorsEndpoint, FetchedAt: syncedAt,
+			StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Constructors), PayloadBytes: len(result.ConstructorsPayload),
+			Summary: mustJSON(map[string]any{"season": year, "standings": len(result.Constructors)}), Payload: result.ConstructorsPayload},
+	} {
+		if err := db.Save(ctx, snapshot); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("SYNC standings season=%d drivers=%d constructors=%d\n", year, len(result.Drivers), len(result.Constructors))
+	return nil
+}
+
+func mustJSON(value any) json.RawMessage {
+	payload, _ := json.Marshal(value)
+	return payload
 }
 
 func syncCalendar(ctx context.Context, db *store.Store, upstream *fetch.Client, year int) error {

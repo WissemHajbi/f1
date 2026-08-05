@@ -61,6 +61,33 @@ func TestReplaceAndReadCalendar(t *testing.T) {
 	}
 }
 
+func TestReplaceAndReadStandings(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC()
+	drivers := []domain.DriverStanding{{Season: 2025, Round: 2, Position: 1, Points: 44.5, Wins: 1,
+		DriverID: "test", GivenName: "Test", FamilyName: "Driver", Constructors: []domain.StandingConstructor{{ID: "team", Name: "Team"}}, SyncedAt: now}}
+	constructors := []domain.ConstructorStanding{{Season: 2025, Round: 2, Position: 1, Points: 80, Wins: 2,
+		Constructor: domain.StandingConstructor{ID: "team", Name: "Team"}, SyncedAt: now}}
+	if err := db.ReplaceStandings(context.Background(), 2025, drivers, constructors); err != nil {
+		t.Fatal(err)
+	}
+	gotDrivers, err := db.DriverStandings(context.Background(), 2025)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotConstructors, err := db.ConstructorStandings(context.Background(), 2025)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotDrivers) != 1 || len(gotDrivers[0].Constructors) != 1 || len(gotConstructors) != 1 {
+		t.Fatalf("drivers=%+v constructors=%+v", gotDrivers, gotConstructors)
+	}
+}
+
 func TestSaveAndReadDriverRoster(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

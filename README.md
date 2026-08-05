@@ -25,6 +25,7 @@ The sync command contacts OpenF1, selects the latest race that ended at least 30
 go run ./cmd/sync -resource drivers -year 2025
 go run ./cmd/sync -resource calendar -year 2025
 go run ./cmd/sync -resource calendar -year 2026
+go run ./cmd/sync -resource standings -year 2025
 ```
 
 Calendar sync replaces one season atomically, preventing clients from seeing a partially updated schedule.
@@ -38,6 +39,8 @@ curl http://localhost:8080/v1/sources
 curl "http://localhost:8080/v1/drivers?season=2025"
 curl "http://localhost:8080/v1/calendar?season=2025"
 curl http://localhost:8080/v1/calendar/next
+curl "http://localhost:8080/v1/standings/drivers?season=2025"
+curl "http://localhost:8080/v1/standings/constructors?season=2025"
 ```
 
 All API endpoints read SQLite only. They never contact providers. Unsynced resources return `404`. `GET /v1/calendar/next` selects the earliest stored race whose race time is in the future.
@@ -62,6 +65,7 @@ docker compose run --rm api /app/probe -sources all -year 2025
 docker compose run --rm api /app/sync -resource drivers -year 2025
 docker compose run --rm api /app/sync -resource calendar -year 2025
 docker compose run --rm api /app/sync -resource calendar -year 2026
+docker compose run --rm api /app/sync -resource standings -year 2025
 docker compose up -d
 ```
 

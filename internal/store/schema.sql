@@ -74,3 +74,47 @@ CREATE TABLE IF NOT EXISTS event_sessions (
     FOREIGN KEY (season, round) REFERENCES events(season, round) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_event_sessions_start ON event_sessions(start_at);
+
+CREATE TABLE IF NOT EXISTS driver_standings (
+    season           INTEGER NOT NULL,
+    driver_id        TEXT NOT NULL,
+    round            INTEGER NOT NULL,
+    position         INTEGER NOT NULL,
+    points           REAL NOT NULL,
+    wins             INTEGER NOT NULL,
+    permanent_number TEXT NOT NULL,
+    code             TEXT NOT NULL,
+    given_name       TEXT NOT NULL,
+    family_name      TEXT NOT NULL,
+    date_of_birth    TEXT NOT NULL,
+    nationality      TEXT NOT NULL,
+    source           TEXT NOT NULL,
+    synced_at        TEXT NOT NULL,
+    PRIMARY KEY (season, driver_id)
+);
+CREATE INDEX IF NOT EXISTS idx_driver_standings_position ON driver_standings(season, position);
+
+CREATE TABLE IF NOT EXISTS driver_standing_constructors (
+    season                  INTEGER NOT NULL,
+    driver_id               TEXT NOT NULL,
+    constructor_id          TEXT NOT NULL,
+    constructor_name        TEXT NOT NULL,
+    constructor_nationality TEXT NOT NULL,
+    PRIMARY KEY (season, driver_id, constructor_id),
+    FOREIGN KEY (season, driver_id) REFERENCES driver_standings(season, driver_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS constructor_standings (
+    season                  INTEGER NOT NULL,
+    constructor_id          TEXT NOT NULL,
+    round                   INTEGER NOT NULL,
+    position                INTEGER NOT NULL,
+    points                  REAL NOT NULL,
+    wins                    INTEGER NOT NULL,
+    constructor_name        TEXT NOT NULL,
+    constructor_nationality TEXT NOT NULL,
+    source                  TEXT NOT NULL,
+    synced_at               TEXT NOT NULL,
+    PRIMARY KEY (season, constructor_id)
+);
+CREATE INDEX IF NOT EXISTS idx_constructor_standings_position ON constructor_standings(season, position);
