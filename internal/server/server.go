@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"oidysts/internal/domain"
 	"oidysts/internal/store"
 )
 
@@ -28,6 +29,9 @@ func New(db *store.Store, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /v1/standings/constructors", s.constructorStandings)
 	mux.HandleFunc("GET /v1/results", s.results)
 	mux.HandleFunc("GET /v1/results/latest", s.latestResult)
+	mux.HandleFunc("GET /v1/meetings", s.meetings)
+	mux.HandleFunc("GET /v1/sessions", s.sessions)
+	mux.HandleFunc("GET /v1/car-data", s.carData)
 	return requestLog(logger, mux)
 }
 
@@ -71,6 +75,123 @@ func (s *Server) drivers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": roster.Drivers, "meta": map[string]any{
 		"season": roster.Session.Year, "session": roster.Session, "synced_at": roster.SyncedAt,
 	}})
+}
+
+func (s *Server) carData(w http.ResponseWriter, r *http.Request) {
+	sessionKey, err := positiveQueryInt(r, "session_key")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	driverNumber, err := positiveQueryInt(r, "driver_number")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	from, err := optionalQueryTime(r, "from")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	to, err := optionalQueryTime(r, "to")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if from != nil && to != nil && !to.After(*from) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "to must be after from"})
+		return
+	}
+	limit := 1000
+	if value := r.URL.Query().Get("limit"); value != "" {
+		limit, err = strconv.Atoi(value)
+		if err != nil || limit <= 0 || limit > 5000 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be between 1 and 5000"})
+			return
+		}
+	}
+	samples, truncated, err := s.store.CarData(r.Context(), domain.CarDataQuery{SessionKey: sessionKey,
+		DriverNumber: driverNumber, From: from, To: to, Limit: limit})
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "car data not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list car data", "session_key", sessionKey, "driver_number", driverNumber, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": samples, "meta": map[string]any{
+		"session_key": sessionKey, "driver_number": driverNumber, "count": len(samples), "truncated": truncated,
+	}})
+}
+
+func positiveQueryInt(r *http.Request, name string) (int, error) {
+	value, err := strconv.Atoi(r.URL.Query().Get(name))
+	if err != nil || value <= 0 {
+		return 0, errors.New(name + " must be a positive integer")
+	}
+	return value, nil
+}
+
+func optionalQueryTime(r *http.Request, name string) (*time.Time, error) {
+	value := r.URL.Query().Get(name)
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return nil, errors.New(name + " must be an RFC3339 timestamp")
+	}
+	parsed = parsed.UTC()
+	return &parsed, nil
+}
+
+func (s *Server) meetings(w http.ResponseWriter, r *http.Request) {
+	year, err := requestedSeason(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	items, err := s.store.Meetings(r.Context(), year)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "meetings not synced for requested season"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list meetings", "season", year, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{"season": year, "count": len(items)}})
+}
+
+func (s *Server) sessions(w http.ResponseWriter, r *http.Request) {
+	year, err := requestedSeason(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	var meetingKey *int
+	if value := r.URL.Query().Get("meeting_key"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "meeting_key must be a positive integer"})
+			return
+		}
+		meetingKey = &parsed
+	}
+	items, err := s.store.Sessions(r.Context(), year, meetingKey)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "sessions not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list sessions", "season", year, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{"season": year, "count": len(items)}})
 }
 
 func (s *Server) results(w http.ResponseWriter, r *http.Request) {

@@ -119,6 +119,62 @@ func TestReplaceAndReadResults(t *testing.T) {
 	}
 }
 
+func TestReplaceAndReadMeetings(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test Grand Prix", OfficialName: "Official Test",
+		Location: "Test City", CountryKey: 1, CountryCode: "TST", CountryName: "Test", CircuitKey: 2,
+		CircuitShortName: "Test Circuit", DateStart: now, GMTOffset: "00:00:00", SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race",
+			Location: "Test City", DateStart: now, DateEnd: now.Add(2 * time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.Meetings(context.Background(), 2025)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := db.Sessions(context.Background(), 2025, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || len(got[0].Sessions) != 1 || len(sessions) != 1 {
+		t.Fatalf("meetings=%+v sessions=%+v", got, sessions)
+	}
+}
+
+func TestUpsertAndReadCarData(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test", DateStart: now, SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race", DateStart: now, DateEnd: now.Add(time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	samples := []domain.CarDataSample{
+		{Timestamp: now.Add(250 * time.Millisecond), SessionKey: 200, MeetingKey: 100, DriverNumber: 4, Speed: 250, RPM: 11000, Gear: 7, Throttle: 100},
+		{Timestamp: now.Add(500 * time.Millisecond), SessionKey: 200, MeetingKey: 100, DriverNumber: 4, Speed: 255, RPM: 11200, Gear: 8, Throttle: 100},
+	}
+	if err := db.UpsertCarData(context.Background(), samples, now); err != nil {
+		t.Fatal(err)
+	}
+	got, truncated, err := db.CarData(context.Background(), domain.CarDataQuery{SessionKey: 200, DriverNumber: 4, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !truncated || got[0].Speed != 250 {
+		t.Fatalf("samples=%+v truncated=%v", got, truncated)
+	}
+}
+
 func TestSaveAndReadDriverRoster(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

@@ -165,3 +165,58 @@ CREATE TABLE IF NOT EXISTS race_results (
     FOREIGN KEY (season, round) REFERENCES result_races(season, round) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_race_results_position ON race_results(season, round, position);
+
+CREATE TABLE IF NOT EXISTS openf1_meetings (
+    meeting_key        INTEGER PRIMARY KEY,
+    year               INTEGER NOT NULL,
+    name               TEXT NOT NULL,
+    official_name      TEXT NOT NULL,
+    location           TEXT NOT NULL,
+    country_key        INTEGER NOT NULL,
+    country_code       TEXT NOT NULL,
+    country_name       TEXT NOT NULL,
+    circuit_key        INTEGER NOT NULL,
+    circuit_short_name TEXT NOT NULL,
+    date_start         TEXT NOT NULL,
+    gmt_offset         TEXT NOT NULL,
+    source             TEXT NOT NULL,
+    synced_at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_openf1_meetings_year_date ON openf1_meetings(year, date_start);
+
+CREATE TABLE IF NOT EXISTS openf1_sessions (
+    session_key        INTEGER PRIMARY KEY,
+    meeting_key        INTEGER NOT NULL REFERENCES openf1_meetings(meeting_key) ON DELETE CASCADE,
+    year               INTEGER NOT NULL,
+    name               TEXT NOT NULL,
+    type               TEXT NOT NULL,
+    location           TEXT NOT NULL,
+    country_code       TEXT NOT NULL,
+    country_name       TEXT NOT NULL,
+    circuit_key        INTEGER NOT NULL,
+    circuit_short_name TEXT NOT NULL,
+    date_start         TEXT NOT NULL,
+    date_end           TEXT NOT NULL,
+    gmt_offset         TEXT NOT NULL,
+    is_cancelled       INTEGER NOT NULL,
+    source             TEXT NOT NULL,
+    synced_at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_openf1_sessions_meeting_date ON openf1_sessions(meeting_key, date_start);
+CREATE INDEX IF NOT EXISTS idx_openf1_sessions_year_date ON openf1_sessions(year, date_start);
+
+CREATE TABLE IF NOT EXISTS car_data_samples (
+    session_key  INTEGER NOT NULL REFERENCES openf1_sessions(session_key) ON DELETE CASCADE,
+    driver_number INTEGER NOT NULL,
+    sampled_at   TEXT NOT NULL,
+    meeting_key  INTEGER NOT NULL,
+    speed        INTEGER NOT NULL,
+    rpm          INTEGER NOT NULL,
+    gear         INTEGER NOT NULL,
+    throttle     INTEGER NOT NULL,
+    brake        INTEGER NOT NULL,
+    drs          INTEGER NOT NULL,
+    source       TEXT NOT NULL,
+    synced_at    TEXT NOT NULL,
+    PRIMARY KEY (session_key, driver_number, sampled_at)
+) WITHOUT ROWID;

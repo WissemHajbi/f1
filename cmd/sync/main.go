@@ -17,14 +17,18 @@ import (
 )
 
 func main() {
-	var resource string
-	var year int
-	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, calendar, standings, or results")
+	var resource, fromValue, toValue string
+	var year, sessionKey, driverNumber int
+	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, or car-data")
 	flag.IntVar(&year, "year", 2025, "season to sync")
+	flag.IntVar(&sessionKey, "session", 0, "OpenF1 session key for bounded resources")
+	flag.IntVar(&driverNumber, "driver", 0, "driver number for bounded resources")
+	flag.StringVar(&fromValue, "from", "", "inclusive RFC3339 range start")
+	flag.StringVar(&toValue, "to", "", "exclusive RFC3339 range end")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if resource != "drivers" && resource != "calendar" && resource != "standings" && resource != "results" {
+	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "car-data" {
 		logger.Error("unsupported resource", "resource", resource)
 		os.Exit(2)
 	}
@@ -42,17 +46,78 @@ func main() {
 	switch resource {
 	case "drivers":
 		err = syncDrivers(ctx, db, upstream, year)
+	case "meetings":
+		err = syncMeetings(ctx, db, upstream, year)
 	case "calendar":
 		err = syncCalendar(ctx, db, upstream, year)
 	case "standings":
 		err = syncStandings(ctx, db, upstream, year)
 	case "results":
 		err = syncResults(ctx, db, upstream, year)
+	case "car-data":
+		err = syncCarData(ctx, db, upstream, sessionKey, driverNumber, fromValue, toValue)
 	}
 	if err != nil {
 		logger.Error("sync failed", "resource", resource, "year", year, "error", err)
 		os.Exit(1)
 	}
+}
+
+func syncCarData(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int, fromValue, toValue string) error {
+	from, err := time.Parse(time.RFC3339Nano, fromValue)
+	if err != nil {
+		return fmt.Errorf("invalid -from RFC3339 timestamp: %w", err)
+	}
+	to, err := time.Parse(time.RFC3339Nano, toValue)
+	if err != nil {
+		return fmt.Errorf("invalid -to RFC3339 timestamp: %w", err)
+	}
+	result, err := openf1.New(upstream).CarData(ctx, sessionKey, driverNumber, from, to)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertCarData(ctx, result.Samples, syncedAt); err != nil {
+		return err
+	}
+	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "car_data_sync", Endpoint: result.Endpoint,
+		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Samples),
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
+			"driver_number": driverNumber, "from": from, "to": to, "samples": len(result.Samples)}), Payload: result.Payload}); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC car-data session=%d driver=%d samples=%d from=%s to=%s\n", sessionKey, driverNumber,
+		len(result.Samples), from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
+	return nil
+}
+
+func syncMeetings(ctx context.Context, db *store.Store, upstream *fetch.Client, year int) error {
+	result, err := openf1.New(upstream).Meetings(ctx, year)
+	if err != nil {
+		return err
+	}
+	if err := db.ReplaceMeetings(ctx, year, result.Meetings); err != nil {
+		return err
+	}
+	sessions := 0
+	for _, meeting := range result.Meetings {
+		sessions += len(meeting.Sessions)
+	}
+	syncedAt := result.Meetings[0].SyncedAt
+	for _, snapshot := range []store.Snapshot{
+		{Source: "openf1", Resource: "meetings_sync", Endpoint: result.MeetingsURL, FetchedAt: syncedAt,
+			StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Meetings), PayloadBytes: len(result.MeetingsPayload),
+			Summary: mustJSON(map[string]any{"season": year, "meetings": len(result.Meetings)}), Payload: result.MeetingsPayload},
+		{Source: "openf1", Resource: "all_sessions_sync", Endpoint: result.SessionsURL, FetchedAt: syncedAt,
+			StatusCode: 200, ContentType: "application/json", RecordCount: sessions, PayloadBytes: len(result.SessionsPayload),
+			Summary: mustJSON(map[string]any{"season": year, "sessions": sessions}), Payload: result.SessionsPayload},
+	} {
+		if err := db.Save(ctx, snapshot); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("SYNC meetings season=%d meetings=%d sessions=%d\n", year, len(result.Meetings), sessions)
+	return nil
 }
 
 func syncDrivers(ctx context.Context, db *store.Store, upstream *fetch.Client, year int) error {
