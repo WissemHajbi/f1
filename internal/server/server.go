@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -29,12 +31,21 @@ func New(db *store.Store, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /v1/standings/constructors", s.constructorStandings)
 	mux.HandleFunc("GET /v1/results", s.results)
 	mux.HandleFunc("GET /v1/results/latest", s.latestResult)
+	mux.HandleFunc("GET /v1/classifications", s.classifications)
 	mux.HandleFunc("GET /v1/meetings", s.meetings)
 	mux.HandleFunc("GET /v1/sessions", s.sessions)
 	mux.HandleFunc("GET /v1/car-data", s.carData)
+	mux.HandleFunc("GET /v1/location", s.location)
+	mux.HandleFunc("GET /v1/team-radio", s.teamRadio)
+	mux.HandleFunc("GET /v1/team-radio/{id}/audio", s.teamRadioAudio)
 	mux.HandleFunc("GET /v1/laps", s.laps)
 	mux.HandleFunc("GET /v1/stints", s.stints)
 	mux.HandleFunc("GET /v1/pit-stops", s.pitStops)
+	mux.HandleFunc("GET /v1/weather", s.weather)
+	mux.HandleFunc("GET /v1/race-control", s.raceControl)
+	mux.HandleFunc("GET /v1/overtakes", s.overtakes)
+	mux.HandleFunc("GET /v1/positions", s.positions)
+	mux.HandleFunc("GET /v1/intervals", s.intervals)
 	return requestLog(logger, mux)
 }
 
@@ -77,6 +88,191 @@ func (s *Server) drivers(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": roster.Drivers, "meta": map[string]any{
 		"season": roster.Session.Year, "session": roster.Session, "synced_at": roster.SyncedAt,
+	}})
+}
+
+func (s *Server) overtakes(w http.ResponseWriter, r *http.Request) {
+	query, err := timelineQuery(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	overtaken, err := optionalPositiveInt(r, "overtaken_driver_number")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	items, truncated, err := s.store.Overtakes(r.Context(), domain.OvertakeQuery{TimelineQuery: query, OvertakenDriverNumber: overtaken})
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "overtakes not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list overtakes", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{"session_key": query.SessionKey, "count": len(items), "truncated": truncated}})
+}
+
+func (s *Server) positions(w http.ResponseWriter, r *http.Request) {
+	query, err := timelineQuery(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	items, truncated, err := s.store.Positions(r.Context(), query)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "positions not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list positions", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{"session_key": query.SessionKey, "count": len(items), "truncated": truncated}})
+}
+
+func (s *Server) intervals(w http.ResponseWriter, r *http.Request) {
+	query, err := timelineQuery(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	items, truncated, err := s.store.Intervals(r.Context(), query)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "intervals not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list intervals", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{"session_key": query.SessionKey, "count": len(items), "truncated": truncated}})
+}
+
+func timelineQuery(r *http.Request) (domain.TimelineQuery, error) {
+	sessionKey, err := positiveQueryInt(r, "session_key")
+	if err != nil {
+		return domain.TimelineQuery{}, err
+	}
+	driver, err := optionalPositiveInt(r, "driver_number")
+	if err != nil {
+		return domain.TimelineQuery{}, err
+	}
+	from, err := optionalQueryTime(r, "from")
+	if err != nil {
+		return domain.TimelineQuery{}, err
+	}
+	to, err := optionalQueryTime(r, "to")
+	if err != nil {
+		return domain.TimelineQuery{}, err
+	}
+	if from != nil && to != nil && !to.After(*from) {
+		return domain.TimelineQuery{}, errors.New("to must be after from")
+	}
+	limit := 1000
+	if value := r.URL.Query().Get("limit"); value != "" {
+		limit, err = strconv.Atoi(value)
+		if err != nil || limit <= 0 || limit > 5000 {
+			return domain.TimelineQuery{}, errors.New("limit must be between 1 and 5000")
+		}
+	}
+	return domain.TimelineQuery{SessionKey: sessionKey, DriverNumber: driver, From: from, To: to, Limit: limit}, nil
+}
+
+func (s *Server) raceControl(w http.ResponseWriter, r *http.Request) {
+	sessionKey, err := positiveQueryInt(r, "session_key")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	driverNumber, err := optionalPositiveInt(r, "driver_number")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	from, err := optionalQueryTime(r, "from")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	to, err := optionalQueryTime(r, "to")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if from != nil && to != nil && !to.After(*from) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "to must be after from"})
+		return
+	}
+	limit := 1000
+	if value := r.URL.Query().Get("limit"); value != "" {
+		limit, err = strconv.Atoi(value)
+		if err != nil || limit <= 0 || limit > 5000 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be between 1 and 5000"})
+			return
+		}
+	}
+	items, truncated, err := s.store.RaceControl(r.Context(), domain.RaceControlQuery{SessionKey: sessionKey,
+		Category: r.URL.Query().Get("category"), DriverNumber: driverNumber, From: from, To: to, Limit: limit})
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "race-control events not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list race control", "session_key", sessionKey, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{
+		"session_key": sessionKey, "count": len(items), "truncated": truncated,
+	}})
+}
+
+func (s *Server) weather(w http.ResponseWriter, r *http.Request) {
+	sessionKey, err := positiveQueryInt(r, "session_key")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	from, err := optionalQueryTime(r, "from")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	to, err := optionalQueryTime(r, "to")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if from != nil && to != nil && !to.After(*from) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "to must be after from"})
+		return
+	}
+	limit := 500
+	if value := r.URL.Query().Get("limit"); value != "" {
+		limit, err = strconv.Atoi(value)
+		if err != nil || limit <= 0 || limit > 2000 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be between 1 and 2000"})
+			return
+		}
+	}
+	items, truncated, err := s.store.Weather(r.Context(), domain.WeatherQuery{SessionKey: sessionKey,
+		From: from, To: to, Limit: limit})
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "weather not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list weather", "session_key", sessionKey, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{
+		"session_key": sessionKey, "count": len(items), "truncated": truncated,
 	}})
 }
 
@@ -202,6 +398,97 @@ func optionalPositiveInt(r *http.Request, name string) (*int, error) {
 	return &parsed, nil
 }
 
+func (s *Server) location(w http.ResponseWriter, r *http.Request) {
+	sessionKey, err := positiveQueryInt(r, "session_key")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	driverNumber, err := positiveQueryInt(r, "driver_number")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	from, err := optionalQueryTime(r, "from")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	to, err := optionalQueryTime(r, "to")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if from != nil && to != nil && !to.After(*from) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "to must be after from"})
+		return
+	}
+	limit := 1000
+	if value := r.URL.Query().Get("limit"); value != "" {
+		limit, err = strconv.Atoi(value)
+		if err != nil || limit <= 0 || limit > 5000 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be between 1 and 5000"})
+			return
+		}
+	}
+	samples, truncated, err := s.store.Location(r.Context(), domain.LocationQuery{SessionKey: sessionKey,
+		DriverNumber: driverNumber, From: from, To: to, Limit: limit})
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "location not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list location", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": samples, "meta": map[string]any{"session_key": sessionKey,
+		"driver_number": driverNumber, "count": len(samples), "truncated": truncated}})
+}
+
+func (s *Server) teamRadio(w http.ResponseWriter, r *http.Request) {
+	query, err := timelineQuery(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	records, truncated, err := s.store.TeamRadio(r.Context(), domain.TeamRadioQuery{SessionKey: query.SessionKey,
+		DriverNumber: query.DriverNumber, From: query.From, To: query.To, Limit: query.Limit})
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "team radio not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list team radio", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": records, "meta": map[string]any{"session_key": query.SessionKey,
+		"count": len(records), "truncated": truncated}})
+}
+
+func (s *Server) teamRadioAudio(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	decoded, err := hex.DecodeString(id)
+	if err != nil || len(decoded) != 32 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid team radio id"})
+		return
+	}
+	audio, contentType, err := s.store.TeamRadioAudio(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "team radio audio not found"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("read team radio audio", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	http.ServeContent(w, r, id, time.Time{}, bytes.NewReader(audio))
+}
+
 func (s *Server) carData(w http.ResponseWriter, r *http.Request) {
 	sessionKey, err := positiveQueryInt(r, "session_key")
 	if err != nil {
@@ -270,6 +557,37 @@ func optionalQueryTime(r *http.Request, name string) (*time.Time, error) {
 	}
 	parsed = parsed.UTC()
 	return &parsed, nil
+}
+
+func (s *Server) classifications(w http.ResponseWriter, r *http.Request) {
+	year, err := requestedSeason(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	kind := r.URL.Query().Get("type")
+	if kind != "qualifying" && kind != "sprint" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type must be qualifying or sprint"})
+		return
+	}
+	round, err := optionalPositiveInt(r, "round")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	items, err := s.store.Classifications(r.Context(), year, kind, round)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "classification not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list classifications", "season", year, "type", kind, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{
+		"season": year, "type": kind, "count": len(items), "source": "jolpica",
+	}})
 }
 
 func (s *Server) meetings(w http.ResponseWriter, r *http.Request) {

@@ -71,9 +71,10 @@ type resultRace struct {
 			Country   string `json:"country"`
 		} `json:"Location"`
 	} `json:"Circuit"`
-	Date    string          `json:"date"`
-	Time    string          `json:"time"`
-	Results []rawRaceResult `json:"Results"`
+	Date          string          `json:"date"`
+	Time          string          `json:"time"`
+	Results       []rawRaceResult `json:"Results"`
+	SprintResults []rawRaceResult `json:"SprintResults"`
 }
 
 type resultsResponse struct {

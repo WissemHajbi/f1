@@ -28,9 +28,17 @@ go run ./cmd/sync -resource calendar -year 2025
 go run ./cmd/sync -resource calendar -year 2026
 go run ./cmd/sync -resource standings -year 2025
 go run ./cmd/sync -resource results -year 2025
+go run ./cmd/sync -resource classifications -year 2025
 go run ./cmd/sync -resource laps -session 9839
 go run ./cmd/sync -resource stints -session 9839
 go run ./cmd/sync -resource pit -session 9839
+go run ./cmd/sync -resource weather -session 9839
+go run ./cmd/sync -resource race-control -session 9839
+go run ./cmd/sync -resource overtakes -session 9839
+go run ./cmd/sync -resource positions -session 9839
+go run ./cmd/sync -resource intervals -session 9839
+go run ./cmd/sync -resource location -session 9839 -driver 1 -from 2025-12-07T13:00:00Z -to 2025-12-07T13:15:00Z
+go run ./cmd/sync -resource team-radio -session 9839 -driver 1
 go run ./cmd/sync -resource car-data -session 9839 -driver 1 -from 2025-12-07T13:00:00Z -to 2025-12-07T13:01:00Z
 ```
 
@@ -53,6 +61,8 @@ curl "http://localhost:8080/v1/standings/constructors?season=2025"
 curl "http://localhost:8080/v1/results?season=2025"
 curl "http://localhost:8080/v1/results?season=2025&round=24"
 curl http://localhost:8080/v1/results/latest
+curl "http://localhost:8080/v1/classifications?season=2025&type=qualifying"
+curl "http://localhost:8080/v1/classifications?season=2025&type=sprint&round=23"
 curl "http://localhost:8080/v1/laps?session_key=9839"
 curl "http://localhost:8080/v1/laps?session_key=9839&driver_number=1"
 curl "http://localhost:8080/v1/laps?session_key=9839&driver_number=1&lap_number=10"
@@ -60,12 +70,21 @@ curl "http://localhost:8080/v1/stints?session_key=9839"
 curl "http://localhost:8080/v1/stints?session_key=9839&driver_number=1"
 curl "http://localhost:8080/v1/pit-stops?session_key=9839"
 curl "http://localhost:8080/v1/pit-stops?session_key=9839&driver_number=1"
+curl "http://localhost:8080/v1/weather?session_key=9839&limit=500"
+curl "http://localhost:8080/v1/weather?session_key=9839&from=2025-12-07T13:00:00Z&to=2025-12-07T13:01:00Z"
+curl "http://localhost:8080/v1/race-control?session_key=9839&limit=1000"
+curl "http://localhost:8080/v1/race-control?session_key=9839&category=Flag"
+curl "http://localhost:8080/v1/overtakes?session_key=9839&driver_number=1"
+curl "http://localhost:8080/v1/positions?session_key=9839&driver_number=1"
+curl "http://localhost:8080/v1/intervals?session_key=9839&driver_number=1&limit=5000"
+curl "http://localhost:8080/v1/location?session_key=9839&driver_number=1&limit=5000"
+curl "http://localhost:8080/v1/team-radio?session_key=9839&driver_number=1"
 curl "http://localhost:8080/v1/car-data?session_key=9839&driver_number=1&limit=1000"
 ```
 
 All API endpoints read SQLite only. They never contact providers. Unsynced resources return `404`. `GET /v1/calendar/next` selects the earliest stored race whose race time is in the future.
 
-Lap, stint, and pit ingestion accept `-session` and an optional `-driver`; omit the driver to fetch the complete session. Laps include sector/mini-sector timing and speed traps. Stints include compound, lap range, and tyre age at the start. OpenF1 pit records provide the stop timestamp, lap, and pit duration; they do not provide separate entry/exit timestamps.
+Lap, stint, and pit ingestion accept `-session` and an optional `-driver`; omit the driver to fetch the complete session. Laps include sector/mini-sector timing and speed traps. Stints include compound, lap range, and tyre age at the start. OpenF1 pit records provide the stop timestamp, lap, and pit duration; they do not provide separate entry/exit timestamps. Weather ingestion stores the complete session timeline; the API supports optional `from`, `to`, and `limit` parameters. Race-control events support optional `category`, `driver_number`, `from`, `to`, and `limit` filters. Overtake, position, and interval timelines support driver/time/limit filters; overtakes additionally support `overtaken_driver_number`. Interval labels such as `+1 LAP` are preserved alongside numeric seconds when available. Location ingestion requires one session, one driver, explicit timestamps, and a maximum 15-minute window. Team-radio sync caches audio in SQLite; returned `/v1/team-radio/{id}/audio` URLs stream locally with byte-range support, so clients never contact OpenF1.
 
 Car telemetry ingestion requires a previously synced OpenF1 session and an explicit time range no longer than 15 minutes. Re-running overlapping ranges is idempotent. The API defaults to 1,000 samples and permits at most 5,000 per response; use `from` and `to` RFC3339 filters for paging/range selection.
 
@@ -92,14 +111,26 @@ docker compose run --rm api /app/sync -resource calendar -year 2025
 docker compose run --rm api /app/sync -resource calendar -year 2026
 docker compose run --rm api /app/sync -resource standings -year 2025
 docker compose run --rm api /app/sync -resource results -year 2025
+docker compose run --rm api /app/sync -resource classifications -year 2025
 docker compose run --rm api /app/sync -resource laps -session 9839
 docker compose run --rm api /app/sync -resource stints -session 9839
 docker compose run --rm api /app/sync -resource pit -session 9839
+docker compose run --rm api /app/sync -resource weather -session 9839
+docker compose run --rm api /app/sync -resource race-control -session 9839
+docker compose run --rm api /app/sync -resource overtakes -session 9839
+docker compose run --rm api /app/sync -resource positions -session 9839
+docker compose run --rm api /app/sync -resource intervals -session 9839
+docker compose run --rm api /app/sync -resource location -session 9839 -driver 1 -from 2025-12-07T13:00:00Z -to 2025-12-07T13:15:00Z
+docker compose run --rm api /app/sync -resource team-radio -session 9839 -driver 1
 docker compose run --rm api /app/sync -resource car-data -session 9839 -driver 1 -from 2025-12-07T13:00:00Z -to 2025-12-07T13:01:00Z
 docker compose up -d
 ```
 
 The named volume `oidysts-data` persists SQLite for both commands.
+
+## Postman
+
+Import `postman/oidysts-f1-api.postman_collection.json` into Postman. The collection contains every API route, organized folders, reusable variables, parameter descriptions, and response tests. Update collection variables such as `season`, `round`, `sessionKey`, and `driverNumber` as needed.
 
 ## Verify
 
@@ -108,4 +139,4 @@ go test ./...
 go vet ./...
 ```
 
-See [source study](docs/source-study.md) and [architecture](docs/architecture.md). The selected provider data is non-commercial; review the documented licensing gate before monetization.
+See [source study](docs/source-study.md), [provider ownership](docs/source-ownership.md), and [architecture](docs/architecture.md). The selected provider data is non-commercial; review the documented licensing gate before monetization.

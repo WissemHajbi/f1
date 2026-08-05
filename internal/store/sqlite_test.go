@@ -260,6 +260,169 @@ func TestUpsertAndReadPitStops(t *testing.T) {
 	}
 }
 
+func TestReplaceAndReadClassifications(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC()
+	points, grid, laps := 8.0, 2, 20
+	items := []domain.SessionClassification{
+		{Season: 2025, Round: 1, Type: "qualifying", Name: "Test GP", Source: "jolpica", SyncedAt: now,
+			Circuit: domain.Circuit{ID: "test", Name: "Test"}, Results: []domain.ClassificationResult{{Position: 1, DriverID: "one", GivenName: "One", Q1: "1:20", Q2: "1:19", Q3: "1:18"}}},
+		{Season: 2025, Round: 2, Type: "sprint", Name: "Sprint GP", Source: "jolpica", SyncedAt: now,
+			Circuit: domain.Circuit{ID: "test", Name: "Test"}, Results: []domain.ClassificationResult{{Position: 1, DriverID: "two", GivenName: "Two", Points: &points, Grid: &grid, Laps: &laps}}},
+	}
+	if err := db.ReplaceClassifications(context.Background(), 2025, items); err != nil {
+		t.Fatal(err)
+	}
+	qualifying, err := db.Classifications(context.Background(), 2025, "qualifying", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sprints, err := db.Classifications(context.Background(), 2025, "sprint", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(qualifying) != 1 || qualifying[0].Results[0].Q3 != "1:18" || len(sprints) != 1 || sprints[0].Results[0].Points == nil {
+		t.Fatalf("qualifying=%+v sprints=%+v", qualifying, sprints)
+	}
+}
+
+func TestUpsertAndReadWeather(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test", DateStart: now, SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race", DateStart: now, DateEnd: now.Add(time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	air, track, humidity := 25.5, 35.2, 60.0
+	samples := []domain.WeatherSample{{Timestamp: now, SessionKey: 200, MeetingKey: 100,
+		AirTemperature: &air, TrackTemperature: &track, Humidity: &humidity}}
+	if err := db.UpsertWeather(context.Background(), samples, now); err != nil {
+		t.Fatal(err)
+	}
+	got, truncated, err := db.Weather(context.Background(), domain.WeatherQuery{SessionKey: 200, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || len(got) != 1 || got[0].AirTemperature == nil || *got[0].AirTemperature != 25.5 {
+		t.Fatalf("weather=%+v truncated=%v", got, truncated)
+	}
+}
+
+func TestUpsertAndReadRaceControl(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test", DateStart: now, SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race", DateStart: now, DateEnd: now.Add(time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	lap, sector := 20, 2
+	events := []domain.RaceControlEvent{{Timestamp: now, SessionKey: 200, MeetingKey: 100,
+		Category: "Flag", Message: "YELLOW IN TRACK SECTOR 2", Flag: "YELLOW", Scope: "Sector", LapNumber: &lap, Sector: &sector}}
+	if err := db.UpsertRaceControl(context.Background(), events, now); err != nil {
+		t.Fatal(err)
+	}
+	got, truncated, err := db.RaceControl(context.Background(), domain.RaceControlQuery{SessionKey: 200, Category: "flag", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || len(got) != 1 || got[0].Flag != "YELLOW" || got[0].Sector == nil {
+		t.Fatalf("events=%+v truncated=%v", got, truncated)
+	}
+}
+
+func TestUpsertAndReadTimelines(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test", DateStart: now, SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race", DateStart: now, DateEnd: now.Add(time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	gap := 2.5
+	if err := db.UpsertOvertakes(context.Background(), []domain.Overtake{{Timestamp: now, SessionKey: 200, MeetingKey: 100, DriverNumber: 4, OvertakenDriverNumber: 5, Position: 3}}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertPositions(context.Background(), []domain.PositionSample{{Timestamp: now, SessionKey: 200, MeetingKey: 100, DriverNumber: 4, Position: 3}}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertIntervals(context.Background(), []domain.IntervalSample{{Timestamp: now, SessionKey: 200, MeetingKey: 100, DriverNumber: 4, GapToLeader: "2.5", GapToLeaderSeconds: &gap, Interval: "+1 LAP"}}, now); err != nil {
+		t.Fatal(err)
+	}
+	query := domain.TimelineQuery{SessionKey: 200, Limit: 10}
+	overtakes, _, err := db.Overtakes(context.Background(), domain.OvertakeQuery{TimelineQuery: query})
+	if err != nil {
+		t.Fatal(err)
+	}
+	positions, _, err := db.Positions(context.Background(), query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intervals, _, err := db.Intervals(context.Background(), query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(overtakes) != 1 || len(positions) != 1 || len(intervals) != 1 || intervals[0].GapToLeaderSeconds == nil {
+		t.Fatalf("overtakes=%+v positions=%+v intervals=%+v", overtakes, positions, intervals)
+	}
+}
+
+func TestUpsertLocationAndTeamRadio(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test", DateStart: now, SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race", DateStart: now, DateEnd: now.Add(time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertLocation(context.Background(), []domain.LocationSample{{Timestamp: now, SessionKey: 200,
+		MeetingKey: 100, DriverNumber: 4, X: 120, Y: -35, Z: 7}}, now); err != nil {
+		t.Fatal(err)
+	}
+	locations, _, err := db.Location(context.Background(), domain.LocationQuery{SessionKey: 200, DriverNumber: 4, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	radio := domain.TeamRadio{ID: id, Timestamp: now, SessionKey: 200, MeetingKey: 100, DriverNumber: 4,
+		RecordingSource: "https://media.example/radio.mp3", ContentType: "audio/mpeg", Audio: []byte("audio")}
+	if err := db.UpsertTeamRadio(context.Background(), []domain.TeamRadio{radio}, now); err != nil {
+		t.Fatal(err)
+	}
+	records, _, err := db.TeamRadio(context.Background(), domain.TeamRadioQuery{SessionKey: 200, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audio, contentType, err := db.TeamRadioAudio(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locations) != 1 || locations[0].Y != -35 || len(records) != 1 || string(audio) != "audio" || contentType != "audio/mpeg" {
+		t.Fatalf("locations=%+v records=%+v audio=%q type=%s", locations, records, audio, contentType)
+	}
+}
+
 func TestSaveAndReadDriverRoster(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

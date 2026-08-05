@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"oidysts/internal/config"
+	"oidysts/internal/domain"
 	"oidysts/internal/fetch"
 	"oidysts/internal/jolpica"
 	"oidysts/internal/openf1"
@@ -19,7 +20,7 @@ import (
 func main() {
 	var resource, fromValue, toValue string
 	var year, sessionKey, driverNumber int
-	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, laps, stints, pit, or car-data")
+	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, classifications, laps, stints, pit, weather, race-control, overtakes, positions, intervals, location, team-radio, or car-data")
 	flag.IntVar(&year, "year", 2025, "season to sync")
 	flag.IntVar(&sessionKey, "session", 0, "OpenF1 session key for bounded resources")
 	flag.IntVar(&driverNumber, "driver", 0, "driver number for bounded resources")
@@ -28,7 +29,7 @@ func main() {
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "laps" && resource != "stints" && resource != "pit" && resource != "car-data" {
+	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "classifications" && resource != "laps" && resource != "stints" && resource != "pit" && resource != "weather" && resource != "race-control" && resource != "overtakes" && resource != "positions" && resource != "intervals" && resource != "location" && resource != "team-radio" && resource != "car-data" {
 		logger.Error("unsupported resource", "resource", resource)
 		os.Exit(2)
 	}
@@ -54,12 +55,28 @@ func main() {
 		err = syncStandings(ctx, db, upstream, year)
 	case "results":
 		err = syncResults(ctx, db, upstream, year)
+	case "classifications":
+		err = syncClassifications(ctx, db, upstream, year)
 	case "laps":
 		err = syncLaps(ctx, db, upstream, sessionKey, driverNumber)
 	case "stints":
 		err = syncStints(ctx, db, upstream, sessionKey, driverNumber)
 	case "pit":
 		err = syncPitStops(ctx, db, upstream, sessionKey, driverNumber)
+	case "weather":
+		err = syncWeather(ctx, db, upstream, sessionKey)
+	case "race-control":
+		err = syncRaceControl(ctx, db, upstream, sessionKey)
+	case "overtakes":
+		err = syncOvertakes(ctx, db, upstream, sessionKey, driverNumber)
+	case "positions":
+		err = syncPositions(ctx, db, upstream, sessionKey, driverNumber)
+	case "intervals":
+		err = syncIntervals(ctx, db, upstream, sessionKey, driverNumber)
+	case "location":
+		err = syncLocation(ctx, db, upstream, sessionKey, driverNumber, fromValue, toValue)
+	case "team-radio":
+		err = syncTeamRadio(ctx, db, upstream, sessionKey, driverNumber)
 	case "car-data":
 		err = syncCarData(ctx, db, upstream, sessionKey, driverNumber, fromValue, toValue)
 	}
@@ -67,6 +84,113 @@ func main() {
 		logger.Error("sync failed", "resource", resource, "year", year, "error", err)
 		os.Exit(1)
 	}
+}
+
+func syncOvertakes(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int) error {
+	driver := optionalDriver(driverNumber)
+	result, err := openf1.New(upstream).Overtakes(ctx, sessionKey, driver)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertOvertakes(ctx, result.Events, syncedAt); err != nil {
+		return err
+	}
+	if err := saveTimelineSnapshot(ctx, db, "overtakes_sync", result.Endpoint, result.Payload, len(result.Events), sessionKey, driver, syncedAt); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC overtakes session=%d driver=%s records=%d\n", sessionKey, driverLabel(driver), len(result.Events))
+	return nil
+}
+
+func syncPositions(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int) error {
+	driver := optionalDriver(driverNumber)
+	result, err := openf1.New(upstream).Positions(ctx, sessionKey, driver)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertPositions(ctx, result.Samples, syncedAt); err != nil {
+		return err
+	}
+	if err := saveTimelineSnapshot(ctx, db, "positions_sync", result.Endpoint, result.Payload, len(result.Samples), sessionKey, driver, syncedAt); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC positions session=%d driver=%s records=%d\n", sessionKey, driverLabel(driver), len(result.Samples))
+	return nil
+}
+
+func syncIntervals(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int) error {
+	driver := optionalDriver(driverNumber)
+	result, err := openf1.New(upstream).Intervals(ctx, sessionKey, driver)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertIntervals(ctx, result.Samples, syncedAt); err != nil {
+		return err
+	}
+	if err := saveTimelineSnapshot(ctx, db, "intervals_sync", result.Endpoint, result.Payload, len(result.Samples), sessionKey, driver, syncedAt); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC intervals session=%d driver=%s records=%d\n", sessionKey, driverLabel(driver), len(result.Samples))
+	return nil
+}
+
+func optionalDriver(number int) *int {
+	if number <= 0 {
+		return nil
+	}
+	return &number
+}
+func driverLabel(driver *int) string {
+	if driver == nil {
+		return "all"
+	}
+	return fmt.Sprintf("%d", *driver)
+}
+func saveTimelineSnapshot(ctx context.Context, db *store.Store, resource, endpoint string, payload []byte, records, sessionKey int, driver *int, syncedAt time.Time) error {
+	return db.Save(ctx, store.Snapshot{Source: "openf1", Resource: resource, Endpoint: endpoint, FetchedAt: syncedAt,
+		StatusCode: 200, ContentType: "application/json", RecordCount: records, PayloadBytes: len(payload),
+		Summary: mustJSON(map[string]any{"session_key": sessionKey, "driver_number": driver, "records": records}), Payload: payload})
+}
+
+func syncRaceControl(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey int) error {
+	result, err := openf1.New(upstream).RaceControl(ctx, sessionKey)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertRaceControl(ctx, result.Events, syncedAt); err != nil {
+		return err
+	}
+	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "race_control_sync", Endpoint: result.Endpoint,
+		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Events),
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
+			"events": len(result.Events)}), Payload: result.Payload}); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC race-control session=%d records=%d\n", sessionKey, len(result.Events))
+	return nil
+}
+
+func syncWeather(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey int) error {
+	result, err := openf1.New(upstream).Weather(ctx, sessionKey)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertWeather(ctx, result.Samples, syncedAt); err != nil {
+		return err
+	}
+	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "weather_sync", Endpoint: result.Endpoint,
+		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Samples),
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
+			"samples": len(result.Samples)}), Payload: result.Payload}); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC weather session=%d records=%d\n", sessionKey, len(result.Samples))
+	return nil
 }
 
 func syncPitStops(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int) error {
@@ -147,6 +271,82 @@ func syncLaps(ctx context.Context, db *store.Store, upstream *fetch.Client, sess
 		label = fmt.Sprintf("%d", *driver)
 	}
 	fmt.Printf("SYNC laps session=%d driver=%s records=%d\n", sessionKey, label, len(result.Laps))
+	return nil
+}
+
+func syncTeamRadio(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int) error {
+	driver := optionalDriver(driverNumber)
+	result, err := openf1.New(upstream).TeamRadio(ctx, sessionKey, driver)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	ticker := time.NewTicker(350 * time.Millisecond)
+	defer ticker.Stop()
+	downloaded, cached := 0, 0
+	for _, record := range result.Records {
+		exists, err := db.TeamRadioExists(ctx, record.ID)
+		if err != nil {
+			return err
+		}
+		if exists {
+			cached++
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+		audio, err := upstream.Get(ctx, record.RecordingSource, "audio/*")
+		if err != nil {
+			return fmt.Errorf("download team radio %s: %w", record.ID, err)
+		}
+		record.Audio, record.ContentType = audio.Body, audio.ContentType
+		if record.ContentType == "" {
+			record.ContentType = "application/octet-stream"
+		}
+		if err := db.UpsertTeamRadio(ctx, []domain.TeamRadio{record}, syncedAt); err != nil {
+			return err
+		}
+		downloaded++
+	}
+	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "team_radio_sync", Endpoint: result.Endpoint,
+		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Records),
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
+			"driver_number": driver, "records": len(result.Records), "downloaded": downloaded, "cached": cached}), Payload: result.Payload}); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC team-radio session=%d driver=%s records=%d downloaded=%d cached=%d\n",
+		sessionKey, driverLabel(driver), len(result.Records), downloaded, cached)
+	return nil
+}
+
+func syncLocation(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int, fromValue, toValue string) error {
+	from, err := time.Parse(time.RFC3339Nano, fromValue)
+	if err != nil {
+		return fmt.Errorf("invalid -from RFC3339 timestamp: %w", err)
+	}
+	to, err := time.Parse(time.RFC3339Nano, toValue)
+	if err != nil {
+		return fmt.Errorf("invalid -to RFC3339 timestamp: %w", err)
+	}
+	result, err := openf1.New(upstream).Location(ctx, sessionKey, driverNumber, from, to)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertLocation(ctx, result.Samples, syncedAt); err != nil {
+		return err
+	}
+	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "location_sync", Endpoint: result.Endpoint,
+		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Samples),
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
+			"driver_number": driverNumber, "from": from, "to": to, "samples": len(result.Samples)}), Payload: result.Payload}); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC location session=%d driver=%d samples=%d from=%s to=%s\n", sessionKey, driverNumber,
+		len(result.Samples), from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	return nil
 }
 
@@ -234,6 +434,35 @@ func syncDrivers(ctx context.Context, db *store.Store, upstream *fetch.Client, y
 	}
 	fmt.Printf("SYNC drivers season=%d session=%d (%s) records=%d\n", year, result.Roster.Session.Key,
 		result.Roster.Session.Location, len(result.Roster.Drivers))
+	return nil
+}
+
+func syncClassifications(ctx context.Context, db *store.Store, upstream *fetch.Client, year int) error {
+	result, err := jolpica.New(upstream).Classifications(ctx, year)
+	if err != nil {
+		return err
+	}
+	if err := db.ReplaceClassifications(ctx, year, result.Classifications); err != nil {
+		return err
+	}
+	qualifying, sprints := 0, 0
+	for _, item := range result.Classifications {
+		if item.Type == "qualifying" {
+			qualifying++
+		} else if item.Type == "sprint" {
+			sprints++
+		}
+	}
+	syncedAt := result.Classifications[0].SyncedAt
+	for index, page := range result.Pages {
+		if err := db.Save(ctx, store.Snapshot{Source: "jolpica", Resource: fmt.Sprintf("classifications_sync_page_%d", index+1),
+			Endpoint: page.Endpoint, FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json",
+			RecordCount: page.Records, PayloadBytes: len(page.Payload), Summary: mustJSON(map[string]any{"season": year,
+				"page": index + 1, "records": page.Records}), Payload: page.Payload}); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("SYNC classifications season=%d qualifying=%d sprints=%d pages=%d\n", year, qualifying, sprints, len(result.Pages))
 	return nil
 }
 

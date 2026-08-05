@@ -1,0 +1,536 @@
+{
+  "info": {
+    "_postman_id": "48fd2de0-936d-4b73-b566-01d1575f1a91",
+    "name": "oidysts F1 API",
+    "description": "Database-backed F1 API. Run the sync commands before testing data endpoints. All requests use collection variables so seasons, rounds, meetings, sessions, and drivers can be changed centrally.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": { "type": "noauth" },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Status code is 200', function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "pm.test('Response content type is expected', function () {",
+          "    const contentType = pm.response.headers.get('Content-Type') || '';",
+          "    if (contentType.includes('application/json')) pm.expect(function () { pm.response.json(); }).not.to.throw();",
+          "    else pm.expect(contentType).to.include('audio/');",
+          "});",
+          "pm.test('Response time is below 2 seconds', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "season", "value": "2025", "type": "string" },
+    { "key": "round", "value": "24", "type": "string" },
+    { "key": "sprintRound", "value": "23", "type": "string" },
+    { "key": "meetingKey", "value": "1276", "type": "string" },
+    { "key": "sessionKey", "value": "9839", "type": "string" },
+    { "key": "driverNumber", "value": "1", "type": "string" },
+    { "key": "lapNumber", "value": "10", "type": "string" },
+    { "key": "raceControlCategory", "value": "Flag", "type": "string" },
+    { "key": "teamRadioId", "value": "f4af4ff71aacf65f35b7132d2c10e7c4b115dc82094ab01a2c56377f3b01257a", "type": "string" },
+    { "key": "from", "value": "2025-12-07T13:00:00Z", "type": "string" },
+    { "key": "to", "value": "2025-12-07T13:01:00Z", "type": "string" },
+    { "key": "limit", "value": "1000", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "01 - System",
+      "description": "Service and ingestion diagnostics.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/health", "host": ["{{baseUrl}}"], "path": ["v1", "health"] },
+            "description": "Checks HTTP service and SQLite connectivity."
+          }
+        },
+        {
+          "name": "Latest Source Snapshots",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/sources", "host": ["{{baseUrl}}"], "path": ["v1", "sources"] },
+            "description": "Shows the latest successful upstream snapshot for each synced resource."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Season and Weekend",
+      "description": "Calendar, roster, OpenF1 meetings, and session-key discovery.",
+      "item": [
+        {
+          "name": "Season Calendar",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calendar?season={{season}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "calendar"],
+              "query": [{ "key": "season", "value": "{{season}}", "description": "Required championship year, 1950–2100." }]
+            },
+            "description": "Returns the normalized Jolpica calendar and scheduled weekend sessions."
+          }
+        },
+        {
+          "name": "Next Upcoming Race",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/calendar/next", "host": ["{{baseUrl}}"], "path": ["v1", "calendar", "next"] },
+            "description": "Returns the earliest future race found in all synced calendars."
+          }
+        },
+        {
+          "name": "Season Driver Roster",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/drivers?season={{season}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "drivers"],
+              "query": [{ "key": "season", "value": "{{season}}", "description": "Required season for the latest synced race roster." }]
+            },
+            "description": "Returns drivers from the latest completed OpenF1 race roster stored for the season."
+          }
+        },
+        {
+          "name": "OpenF1 Meetings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/meetings?season={{season}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "meetings"],
+              "query": [{ "key": "season", "value": "{{season}}", "description": "Required season. Each meeting includes its sessions." }]
+            },
+            "description": "Returns the OpenF1 meeting registry with nested practice, qualifying, sprint, and race sessions."
+          }
+        },
+        {
+          "name": "All OpenF1 Sessions for Season",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sessions?season={{season}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "sessions"],
+              "query": [
+                { "key": "season", "value": "{{season}}", "description": "Required season." },
+                { "key": "meeting_key", "value": "{{meetingKey}}", "description": "Optional OpenF1 meeting key.", "disabled": true }
+              ]
+            },
+            "description": "Returns every synced OpenF1 session in the season. Enable meeting_key to filter one weekend."
+          }
+        },
+        {
+          "name": "Sessions for Meeting",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sessions?season={{season}}&meeting_key={{meetingKey}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "sessions"],
+              "query": [
+                { "key": "season", "value": "{{season}}", "description": "Required season." },
+                { "key": "meeting_key", "value": "{{meetingKey}}", "description": "Required in this request to select one weekend." }
+              ]
+            },
+            "description": "Returns sessions for one OpenF1 meeting. Use this to discover session_key values."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Championships",
+      "description": "Jolpica championship standings.",
+      "item": [
+        {
+          "name": "Driver Championship Standings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/standings/drivers?season={{season}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "standings", "drivers"],
+              "query": [{ "key": "season", "value": "{{season}}", "description": "Required championship year." }]
+            },
+            "description": "Returns normalized driver positions, points, wins, and constructors."
+          }
+        },
+        {
+          "name": "Constructor Championship Standings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/standings/constructors?season={{season}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "standings", "constructors"],
+              "query": [{ "key": "season", "value": "{{season}}", "description": "Required championship year." }]
+            },
+            "description": "Returns normalized constructor positions, points, and wins."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Results and Classifications",
+      "description": "Jolpica-owned race, qualifying, and sprint classifications.",
+      "item": [
+        {
+          "name": "Season Race Results",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/results?season={{season}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "results"],
+              "query": [
+                { "key": "season", "value": "{{season}}", "description": "Required season." },
+                { "key": "round", "value": "{{round}}", "description": "Optional positive round number.", "disabled": true }
+              ]
+            },
+            "description": "Returns every synced race classification for the season. Enable round for one race."
+          }
+        },
+        {
+          "name": "Race Result by Round",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/results?season={{season}}&round={{round}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "results"],
+              "query": [
+                { "key": "season", "value": "{{season}}", "description": "Required season." },
+                { "key": "round", "value": "{{round}}", "description": "Required in this request to select a race." }
+              ]
+            },
+            "description": "Returns one race classification with grid, points, status, timing, and fastest-lap details."
+          }
+        },
+        {
+          "name": "Latest Stored Race Result",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/results/latest", "host": ["{{baseUrl}}"], "path": ["v1", "results", "latest"] },
+            "description": "Returns the newest completed result across all synced seasons."
+          }
+        },
+        {
+          "name": "Qualifying Classifications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/classifications?season={{season}}&type=qualifying",
+              "host": ["{{baseUrl}}"], "path": ["v1", "classifications"],
+              "query": [
+                { "key": "season", "value": "{{season}}", "description": "Required season." },
+                { "key": "type", "value": "qualifying", "description": "Required classification type: qualifying or sprint." },
+                { "key": "round", "value": "{{round}}", "description": "Optional positive round number.", "disabled": true }
+              ]
+            },
+            "description": "Returns qualifying positions and Q1/Q2/Q3 times. Enable round for one event."
+          }
+        },
+        {
+          "name": "Sprint Classification by Round",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/classifications?season={{season}}&type=sprint&round={{sprintRound}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "classifications"],
+              "query": [
+                { "key": "season", "value": "{{season}}", "description": "Required season." },
+                { "key": "type", "value": "sprint", "description": "Required classification type." },
+                { "key": "round", "value": "{{sprintRound}}", "description": "Sprint round. For 2025 the default is round 23." }
+              ]
+            },
+            "description": "Returns a sprint classification. For 2025, sprint rounds are 2, 6, 13, 19, 21, and 23."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Session Analysis",
+      "description": "OpenF1 lap, tyre-strategy, and pit-stop data.",
+      "item": [
+        {
+          "name": "Session Laps",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/laps?session_key={{sessionKey}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "laps"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional driver filter.", "disabled": true },
+                { "key": "lap_number", "value": "{{lapNumber}}", "description": "Optional lap filter.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Optional result limit, 1–5000. Default: 2000." }
+              ]
+            },
+            "description": "Returns lap, sector, mini-sector, and speed-trap data for a session."
+          }
+        },
+        {
+          "name": "Driver Laps",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/laps?session_key={{sessionKey}}&driver_number={{driverNumber}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "laps"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Required in this request." },
+                { "key": "lap_number", "value": "{{lapNumber}}", "description": "Optional specific lap.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Result limit, maximum 5000." }
+              ]
+            },
+            "description": "Returns every stored lap for one driver in the session."
+          }
+        },
+        {
+          "name": "Driver Tyre Stints",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/stints?session_key={{sessionKey}}&driver_number={{driverNumber}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "stints"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional driver filter; remove to return all drivers." },
+                { "key": "limit", "value": "500", "description": "Optional limit, maximum 2000.", "disabled": true }
+              ]
+            },
+            "description": "Returns tyre compound, stint number, lap range, and tyre age at stint start."
+          }
+        },
+        {
+          "name": "Driver Pit Stops",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/pit-stops?session_key={{sessionKey}}&driver_number={{driverNumber}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "pit-stops"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional driver filter; remove to return all drivers." },
+                { "key": "limit", "value": "500", "description": "Optional limit, maximum 2000.", "disabled": true }
+              ]
+            },
+            "description": "Returns pit-stop timestamp, lap, and pit duration. OpenF1 does not provide separate entry/exit timestamps."
+          }
+        },
+        {
+          "name": "Session Weather Timeline",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/weather?session_key={{sessionKey}}&limit=500",
+              "host": ["{{baseUrl}}"], "path": ["v1", "weather"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "from", "value": "{{from}}", "description": "Optional inclusive RFC3339 start timestamp.", "disabled": true },
+                { "key": "to", "value": "{{to}}", "description": "Optional inclusive RFC3339 end timestamp.", "disabled": true },
+                { "key": "limit", "value": "500", "description": "Optional result limit, 1–2000. Default: 500." }
+              ]
+            },
+            "description": "Returns air/track temperature, humidity, pressure, rainfall, and wind samples. Enable from/to to select a time range."
+          }
+        },
+        {
+          "name": "Race Control Timeline",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/race-control?session_key={{sessionKey}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "race-control"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "category", "value": "{{raceControlCategory}}", "description": "Optional case-insensitive category such as Flag, SafetyCar, CarEvent, Drs, SessionStatus, or Other.", "disabled": true },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional driver-specific event filter.", "disabled": true },
+                { "key": "from", "value": "{{from}}", "description": "Optional inclusive RFC3339 start timestamp.", "disabled": true },
+                { "key": "to", "value": "{{to}}", "description": "Optional inclusive RFC3339 end timestamp.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Optional result limit, 1–5000. Default: 1000." }
+              ]
+            },
+            "description": "Returns flags, Safety Car/VSC periods, investigations, penalties, track limits, and other race-control messages. Enable optional filters as needed."
+          }
+        },
+        {
+          "name": "Overtake Timeline",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/overtakes?session_key={{sessionKey}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "overtakes"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional overtaking-driver filter.", "disabled": true },
+                { "key": "overtaken_driver_number", "value": "{{driverNumber}}", "description": "Optional overtaken-driver filter.", "disabled": true },
+                { "key": "from", "value": "{{from}}", "description": "Optional inclusive RFC3339 start timestamp.", "disabled": true },
+                { "key": "to", "value": "{{to}}", "description": "Optional inclusive RFC3339 end timestamp.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Optional result limit, 1–5000. Default: 1000." }
+              ]
+            },
+            "description": "Returns overtaking driver, overtaken driver, resulting position, and timestamp."
+          }
+        },
+        {
+          "name": "Position Timeline",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/positions?session_key={{sessionKey}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "positions"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional driver filter.", "disabled": true },
+                { "key": "from", "value": "{{from}}", "description": "Optional inclusive RFC3339 start timestamp.", "disabled": true },
+                { "key": "to", "value": "{{to}}", "description": "Optional inclusive RFC3339 end timestamp.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Optional result limit, 1–5000. Default: 1000." }
+              ]
+            },
+            "description": "Returns timestamped race positions for progression charts."
+          }
+        },
+        {
+          "name": "Interval Timeline",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/intervals?session_key={{sessionKey}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "intervals"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional driver filter.", "disabled": true },
+                { "key": "from", "value": "{{from}}", "description": "Optional inclusive RFC3339 start timestamp.", "disabled": true },
+                { "key": "to", "value": "{{to}}", "description": "Optional inclusive RFC3339 end timestamp.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Optional result limit, 1–5000. Default: 1000." }
+              ]
+            },
+            "description": "Returns gap-to-leader and interval-to-car-ahead values. Numeric seconds and labels such as +1 LAP are preserved."
+          }
+        },
+        {
+          "name": "Team Radio",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/team-radio?session_key={{sessionKey}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "team-radio"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional driver filter.", "disabled": true },
+                { "key": "from", "value": "{{from}}", "description": "Optional inclusive RFC3339 start timestamp.", "disabled": true },
+                { "key": "to", "value": "{{to}}", "description": "Optional inclusive RFC3339 end timestamp.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Optional result limit, 1–5000. Default: 1000." }
+              ]
+            },
+            "description": "Returns locally stored team-radio metadata and backend audio URLs. Copy an id into teamRadioId if using another session."
+          }
+        },
+        {
+          "name": "Team Radio Audio",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "audio/*" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/team-radio/{{teamRadioId}}/audio",
+              "host": ["{{baseUrl}}"], "path": ["v1", "team-radio", "{{teamRadioId}}", "audio"]
+            },
+            "description": "Streams locally cached audio with byte-range support; it never contacts OpenF1."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Telemetry",
+      "description": "Bounded, database-backed OpenF1 car telemetry.",
+      "item": [
+        {
+          "name": "Driver Car Data",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/car-data?session_key={{sessionKey}}&driver_number={{driverNumber}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "car-data"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Required driver number." },
+                { "key": "from", "value": "{{from}}", "description": "Optional inclusive RFC3339 start.", "disabled": true },
+                { "key": "to", "value": "{{to}}", "description": "Optional inclusive RFC3339 end.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Optional limit, 1–5000. Default: 1000." }
+              ]
+            },
+            "description": "Returns stored speed, RPM, gear, throttle, brake, and DRS samples."
+          }
+        },
+        {
+          "name": "Driver Car Data by Time Range",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/car-data?session_key={{sessionKey}}&driver_number={{driverNumber}}&from={{from}}&to={{to}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "car-data"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Required driver number." },
+                { "key": "from", "value": "{{from}}", "description": "Inclusive RFC3339 start timestamp." },
+                { "key": "to", "value": "{{to}}", "description": "Inclusive RFC3339 end timestamp." },
+                { "key": "limit", "value": "{{limit}}", "description": "Result limit, maximum 5000." }
+              ]
+            },
+            "description": "Returns only telemetry samples stored inside the selected time range."
+          }
+        },
+        {
+          "name": "Driver Track Location",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/location?session_key={{sessionKey}}&driver_number={{driverNumber}}&limit={{limit}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "location"],
+              "query": [
+                { "key": "session_key", "value": "{{sessionKey}}", "description": "Required OpenF1 session key." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Required driver number." },
+                { "key": "from", "value": "{{from}}", "description": "Optional inclusive RFC3339 start timestamp.", "disabled": true },
+                { "key": "to", "value": "{{to}}", "description": "Optional inclusive RFC3339 end timestamp.", "disabled": true },
+                { "key": "limit", "value": "{{limit}}", "description": "Optional result limit, 1–5000. Default: 1000." }
+              ]
+            },
+            "description": "Returns locally stored x/y/z coordinates for track-map rendering."
+          }
+        }
+      ]
+    }
+  ]
+}

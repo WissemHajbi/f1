@@ -15,6 +15,24 @@ type CarDataSample struct {
 	DRS          int       `json:"drs"`
 }
 
+type LocationSample struct {
+	Timestamp    time.Time `json:"timestamp"`
+	SessionKey   int       `json:"session_key"`
+	MeetingKey   int       `json:"meeting_key"`
+	DriverNumber int       `json:"driver_number"`
+	X            int       `json:"x"`
+	Y            int       `json:"y"`
+	Z            int       `json:"z"`
+}
+
+type LocationQuery struct {
+	SessionKey   int
+	DriverNumber int
+	From         *time.Time
+	To           *time.Time
+	Limit        int
+}
+
 type CarDataQuery struct {
 	SessionKey   int
 	DriverNumber int
