@@ -32,6 +32,7 @@ func New(db *store.Store, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /v1/meetings", s.meetings)
 	mux.HandleFunc("GET /v1/sessions", s.sessions)
 	mux.HandleFunc("GET /v1/car-data", s.carData)
+	mux.HandleFunc("GET /v1/laps", s.laps)
 	return requestLog(logger, mux)
 }
 
@@ -75,6 +76,58 @@ func (s *Server) drivers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": roster.Drivers, "meta": map[string]any{
 		"season": roster.Session.Year, "session": roster.Session, "synced_at": roster.SyncedAt,
 	}})
+}
+
+func (s *Server) laps(w http.ResponseWriter, r *http.Request) {
+	sessionKey, err := positiveQueryInt(r, "session_key")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	driverNumber, err := optionalPositiveInt(r, "driver_number")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	lapNumber, err := optionalPositiveInt(r, "lap_number")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	limit := 2000
+	if value := r.URL.Query().Get("limit"); value != "" {
+		limit, err = strconv.Atoi(value)
+		if err != nil || limit <= 0 || limit > 5000 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be between 1 and 5000"})
+			return
+		}
+	}
+	items, truncated, err := s.store.Laps(r.Context(), domain.LapQuery{SessionKey: sessionKey,
+		DriverNumber: driverNumber, LapNumber: lapNumber, Limit: limit})
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "laps not synced for requested filters"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list laps", "session_key", sessionKey, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{
+		"session_key": sessionKey, "count": len(items), "truncated": truncated,
+	}})
+}
+
+func optionalPositiveInt(r *http.Request, name string) (*int, error) {
+	value := r.URL.Query().Get(name)
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return nil, errors.New(name + " must be a positive integer")
+	}
+	return &parsed, nil
 }
 
 func (s *Server) carData(w http.ResponseWriter, r *http.Request) {

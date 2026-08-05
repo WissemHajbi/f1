@@ -175,6 +175,35 @@ func TestUpsertAndReadCarData(t *testing.T) {
 	}
 }
 
+func TestUpsertAndReadLaps(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test", DateStart: now, SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race", DateStart: now, DateEnd: now.Add(time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	duration, sector, speed := 90.5, 30.1, 310
+	laps := []domain.Lap{{SessionKey: 200, MeetingKey: 100, DriverNumber: 4, LapNumber: 1,
+		DateStart: &now, LapDuration: &duration, Sector1Duration: &sector, SpeedTrap: &speed,
+		Sector1Segments: []int{2049, 2051}, Sector2Segments: []int{}, Sector3Segments: []int{2051}}}
+	if err := db.UpsertLaps(context.Background(), laps, now); err != nil {
+		t.Fatal(err)
+	}
+	driver := 4
+	got, truncated, err := db.Laps(context.Background(), domain.LapQuery{SessionKey: 200, DriverNumber: &driver, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || len(got) != 1 || got[0].LapDuration == nil || len(got[0].Sector1Segments) != 2 {
+		t.Fatalf("laps=%+v truncated=%v", got, truncated)
+	}
+}
+
 func TestSaveAndReadDriverRoster(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

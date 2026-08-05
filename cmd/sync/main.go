@@ -19,7 +19,7 @@ import (
 func main() {
 	var resource, fromValue, toValue string
 	var year, sessionKey, driverNumber int
-	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, or car-data")
+	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, laps, or car-data")
 	flag.IntVar(&year, "year", 2025, "season to sync")
 	flag.IntVar(&sessionKey, "session", 0, "OpenF1 session key for bounded resources")
 	flag.IntVar(&driverNumber, "driver", 0, "driver number for bounded resources")
@@ -28,7 +28,7 @@ func main() {
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "car-data" {
+	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "laps" && resource != "car-data" {
 		logger.Error("unsupported resource", "resource", resource)
 		os.Exit(2)
 	}
@@ -54,6 +54,8 @@ func main() {
 		err = syncStandings(ctx, db, upstream, year)
 	case "results":
 		err = syncResults(ctx, db, upstream, year)
+	case "laps":
+		err = syncLaps(ctx, db, upstream, sessionKey, driverNumber)
 	case "car-data":
 		err = syncCarData(ctx, db, upstream, sessionKey, driverNumber, fromValue, toValue)
 	}
@@ -61,6 +63,33 @@ func main() {
 		logger.Error("sync failed", "resource", resource, "year", year, "error", err)
 		os.Exit(1)
 	}
+}
+
+func syncLaps(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int) error {
+	var driver *int
+	if driverNumber > 0 {
+		driver = &driverNumber
+	}
+	result, err := openf1.New(upstream).Laps(ctx, sessionKey, driver)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertLaps(ctx, result.Laps, syncedAt); err != nil {
+		return err
+	}
+	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "laps_sync", Endpoint: result.Endpoint,
+		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Laps),
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
+			"driver_number": driver, "laps": len(result.Laps)}), Payload: result.Payload}); err != nil {
+		return err
+	}
+	label := "all"
+	if driver != nil {
+		label = fmt.Sprintf("%d", *driver)
+	}
+	fmt.Printf("SYNC laps session=%d driver=%s records=%d\n", sessionKey, label, len(result.Laps))
+	return nil
 }
 
 func syncCarData(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int, fromValue, toValue string) error {

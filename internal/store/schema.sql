@@ -220,3 +220,25 @@ CREATE TABLE IF NOT EXISTS car_data_samples (
     synced_at    TEXT NOT NULL,
     PRIMARY KEY (session_key, driver_number, sampled_at)
 ) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS laps (
+    session_key      INTEGER NOT NULL REFERENCES openf1_sessions(session_key) ON DELETE CASCADE,
+    driver_number    INTEGER NOT NULL,
+    lap_number       INTEGER NOT NULL,
+    meeting_key      INTEGER NOT NULL,
+    date_start       TEXT,
+    lap_duration     REAL,
+    sector_1_duration REAL,
+    sector_2_duration REAL,
+    sector_3_duration REAL,
+    i1_speed         INTEGER,
+    i2_speed         INTEGER,
+    speed_trap       INTEGER,
+    sector_1_segments TEXT NOT NULL,
+    sector_2_segments TEXT NOT NULL,
+    sector_3_segments TEXT NOT NULL,
+    is_pit_out_lap   INTEGER NOT NULL,
+    source           TEXT NOT NULL,
+    synced_at        TEXT NOT NULL,
+    PRIMARY KEY (session_key, driver_number, lap_number)
+) WITHOUT ROWID;
