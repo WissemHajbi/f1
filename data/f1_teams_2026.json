@@ -1,0 +1,6 @@
+{
+  "$schema": "./f1_teams.schema.json",
+  "season": 2026,
+  "last_verified_at": null,
+  "teams": []
+}

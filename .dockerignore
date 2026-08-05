@@ -1,0 +1,6 @@
+.git
+.pi
+storage
+data/*.db
+data/*.db-*
+*.log

@@ -1,0 +1,23 @@
+services:
+  api:
+    build:
+      context: .
+    environment:
+      HTTP_ADDRESS: ":8080"
+      DB_PATH: /app/storage/oidysts.db
+      UPSTREAM_USER_AGENT: ${UPSTREAM_USER_AGENT:-oidysts/0.1}
+      UPSTREAM_TIMEOUT: 20s
+      UPSTREAM_MAX_BODY_BYTES: 10485760
+    ports:
+      - "8080:8080"
+    volumes:
+      - oidysts-data:/app/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/v1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  oidysts-data:

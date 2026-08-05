@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oidysts.local/schemas/f1-teams.json",
+  "type": "object",
+  "required": ["season", "teams"],
+  "properties": {
+    "season": { "type": "integer", "minimum": 1950 },
+    "last_verified_at": { "type": ["string", "null"], "format": "date-time" },
+    "teams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "chassis", "power_unit", "leadership", "race_engineers", "colors"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "name": { "type": "string", "minLength": 1 },
+          "chassis": { "type": "string", "minLength": 1 },
+          "power_unit": { "type": "string", "minLength": 1 },
+          "leadership": {
+            "type": "object",
+            "required": ["team_principal", "technical_director"],
+            "properties": {
+              "team_principal": { "type": ["string", "null"] },
+              "technical_director": { "type": ["string", "null"] }
+            },
+            "additionalProperties": false
+          },
+          "race_engineers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["driver_number", "name"],
+              "properties": {
+                "driver_number": { "type": "integer", "minimum": 1, "maximum": 99 },
+                "name": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "colors": {
+            "type": "object",
+            "required": ["primary_hex", "secondary_hex", "accent_hex", "text_contrast"],
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}
