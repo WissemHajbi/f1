@@ -143,16 +143,20 @@ func optionalDriver(number int) *int {
 	}
 	return &number
 }
+
 func driverLabel(driver *int) string {
 	if driver == nil {
 		return "all"
 	}
 	return fmt.Sprintf("%d", *driver)
 }
+
 func saveTimelineSnapshot(ctx context.Context, db *store.Store, resource, endpoint string, payload []byte, records, sessionKey int, driver *int, syncedAt time.Time) error {
-	return db.Save(ctx, store.Snapshot{Source: "openf1", Resource: resource, Endpoint: endpoint, FetchedAt: syncedAt,
+	return db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: resource, Endpoint: endpoint, FetchedAt: syncedAt,
 		StatusCode: 200, ContentType: "application/json", RecordCount: records, PayloadBytes: len(payload),
-		Summary: mustJSON(map[string]any{"session_key": sessionKey, "driver_number": driver, "records": records}), Payload: payload})
+		Summary: mustJSON(map[string]any{"session_key": sessionKey, "driver_number": driver, "records": records}), Payload: payload,
+	})
 }
 
 func syncRaceControl(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey int) error {
@@ -164,10 +168,14 @@ func syncRaceControl(ctx context.Context, db *store.Store, upstream *fetch.Clien
 	if err := db.UpsertRaceControl(ctx, result.Events, syncedAt); err != nil {
 		return err
 	}
-	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "race_control_sync", Endpoint: result.Endpoint,
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "race_control_sync", Endpoint: result.Endpoint,
 		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Events),
-		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
-			"events": len(result.Events)}), Payload: result.Payload}); err != nil {
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key": sessionKey,
+			"events":      len(result.Events),
+		}), Payload: result.Payload,
+	}); err != nil {
 		return err
 	}
 	fmt.Printf("SYNC race-control session=%d records=%d\n", sessionKey, len(result.Events))
@@ -183,10 +191,14 @@ func syncWeather(ctx context.Context, db *store.Store, upstream *fetch.Client, s
 	if err := db.UpsertWeather(ctx, result.Samples, syncedAt); err != nil {
 		return err
 	}
-	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "weather_sync", Endpoint: result.Endpoint,
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "weather_sync", Endpoint: result.Endpoint,
 		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Samples),
-		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
-			"samples": len(result.Samples)}), Payload: result.Payload}); err != nil {
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key": sessionKey,
+			"samples":     len(result.Samples),
+		}), Payload: result.Payload,
+	}); err != nil {
 		return err
 	}
 	fmt.Printf("SYNC weather session=%d records=%d\n", sessionKey, len(result.Samples))
@@ -206,10 +218,14 @@ func syncPitStops(ctx context.Context, db *store.Store, upstream *fetch.Client, 
 	if err := db.UpsertPitStops(ctx, result.PitStops, syncedAt); err != nil {
 		return err
 	}
-	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "pit_sync", Endpoint: result.Endpoint,
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "pit_sync", Endpoint: result.Endpoint,
 		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.PitStops),
-		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
-			"driver_number": driver, "pit_stops": len(result.PitStops)}), Payload: result.Payload}); err != nil {
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key":   sessionKey,
+			"driver_number": driver, "pit_stops": len(result.PitStops),
+		}), Payload: result.Payload,
+	}); err != nil {
 		return err
 	}
 	label := "all"
@@ -233,10 +249,14 @@ func syncStints(ctx context.Context, db *store.Store, upstream *fetch.Client, se
 	if err := db.UpsertStints(ctx, result.Stints, syncedAt); err != nil {
 		return err
 	}
-	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "stints_sync", Endpoint: result.Endpoint,
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "stints_sync", Endpoint: result.Endpoint,
 		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Stints),
-		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
-			"driver_number": driver, "stints": len(result.Stints)}), Payload: result.Payload}); err != nil {
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key":   sessionKey,
+			"driver_number": driver, "stints": len(result.Stints),
+		}), Payload: result.Payload,
+	}); err != nil {
 		return err
 	}
 	label := "all"
@@ -260,10 +280,14 @@ func syncLaps(ctx context.Context, db *store.Store, upstream *fetch.Client, sess
 	if err := db.UpsertLaps(ctx, result.Laps, syncedAt); err != nil {
 		return err
 	}
-	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "laps_sync", Endpoint: result.Endpoint,
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "laps_sync", Endpoint: result.Endpoint,
 		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Laps),
-		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
-			"driver_number": driver, "laps": len(result.Laps)}), Payload: result.Payload}); err != nil {
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key":   sessionKey,
+			"driver_number": driver, "laps": len(result.Laps),
+		}), Payload: result.Payload,
+	}); err != nil {
 		return err
 	}
 	label := "all"
@@ -311,10 +335,14 @@ func syncTeamRadio(ctx context.Context, db *store.Store, upstream *fetch.Client,
 		}
 		downloaded++
 	}
-	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "team_radio_sync", Endpoint: result.Endpoint,
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "team_radio_sync", Endpoint: result.Endpoint,
 		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Records),
-		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
-			"driver_number": driver, "records": len(result.Records), "downloaded": downloaded, "cached": cached}), Payload: result.Payload}); err != nil {
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key":   sessionKey,
+			"driver_number": driver, "records": len(result.Records), "downloaded": downloaded, "cached": cached,
+		}), Payload: result.Payload,
+	}); err != nil {
 		return err
 	}
 	fmt.Printf("SYNC team-radio session=%d driver=%s records=%d downloaded=%d cached=%d\n",
@@ -339,10 +367,14 @@ func syncLocation(ctx context.Context, db *store.Store, upstream *fetch.Client, 
 	if err := db.UpsertLocation(ctx, result.Samples, syncedAt); err != nil {
 		return err
 	}
-	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "location_sync", Endpoint: result.Endpoint,
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "location_sync", Endpoint: result.Endpoint,
 		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Samples),
-		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
-			"driver_number": driverNumber, "from": from, "to": to, "samples": len(result.Samples)}), Payload: result.Payload}); err != nil {
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key":   sessionKey,
+			"driver_number": driverNumber, "from": from, "to": to, "samples": len(result.Samples),
+		}), Payload: result.Payload,
+	}); err != nil {
 		return err
 	}
 	fmt.Printf("SYNC location session=%d driver=%d samples=%d from=%s to=%s\n", sessionKey, driverNumber,
@@ -367,10 +399,14 @@ func syncCarData(ctx context.Context, db *store.Store, upstream *fetch.Client, s
 	if err := db.UpsertCarData(ctx, result.Samples, syncedAt); err != nil {
 		return err
 	}
-	if err := db.Save(ctx, store.Snapshot{Source: "openf1", Resource: "car_data_sync", Endpoint: result.Endpoint,
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "car_data_sync", Endpoint: result.Endpoint,
 		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Samples),
-		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{"session_key": sessionKey,
-			"driver_number": driverNumber, "from": from, "to": to, "samples": len(result.Samples)}), Payload: result.Payload}); err != nil {
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key":   sessionKey,
+			"driver_number": driverNumber, "from": from, "to": to, "samples": len(result.Samples),
+		}), Payload: result.Payload,
+	}); err != nil {
 		return err
 	}
 	fmt.Printf("SYNC car-data session=%d driver=%d samples=%d from=%s to=%s\n", sessionKey, driverNumber,
@@ -392,12 +428,16 @@ func syncMeetings(ctx context.Context, db *store.Store, upstream *fetch.Client, 
 	}
 	syncedAt := result.Meetings[0].SyncedAt
 	for _, snapshot := range []store.Snapshot{
-		{Source: "openf1", Resource: "meetings_sync", Endpoint: result.MeetingsURL, FetchedAt: syncedAt,
+		{
+			Source: "openf1", Resource: "meetings_sync", Endpoint: result.MeetingsURL, FetchedAt: syncedAt,
 			StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Meetings), PayloadBytes: len(result.MeetingsPayload),
-			Summary: mustJSON(map[string]any{"season": year, "meetings": len(result.Meetings)}), Payload: result.MeetingsPayload},
-		{Source: "openf1", Resource: "all_sessions_sync", Endpoint: result.SessionsURL, FetchedAt: syncedAt,
+			Summary: mustJSON(map[string]any{"season": year, "meetings": len(result.Meetings)}), Payload: result.MeetingsPayload,
+		},
+		{
+			Source: "openf1", Resource: "all_sessions_sync", Endpoint: result.SessionsURL, FetchedAt: syncedAt,
 			StatusCode: 200, ContentType: "application/json", RecordCount: sessions, PayloadBytes: len(result.SessionsPayload),
-			Summary: mustJSON(map[string]any{"season": year, "sessions": sessions}), Payload: result.SessionsPayload},
+			Summary: mustJSON(map[string]any{"season": year, "sessions": sessions}), Payload: result.SessionsPayload,
+		},
 	} {
 		if err := db.Save(ctx, snapshot); err != nil {
 			return err
@@ -455,10 +495,14 @@ func syncClassifications(ctx context.Context, db *store.Store, upstream *fetch.C
 	}
 	syncedAt := result.Classifications[0].SyncedAt
 	for index, page := range result.Pages {
-		if err := db.Save(ctx, store.Snapshot{Source: "jolpica", Resource: fmt.Sprintf("classifications_sync_page_%d", index+1),
+		if err := db.Save(ctx, store.Snapshot{
+			Source: "jolpica", Resource: fmt.Sprintf("classifications_sync_page_%d", index+1),
 			Endpoint: page.Endpoint, FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json",
-			RecordCount: page.Records, PayloadBytes: len(page.Payload), Summary: mustJSON(map[string]any{"season": year,
-				"page": index + 1, "records": page.Records}), Payload: page.Payload}); err != nil {
+			RecordCount: page.Records, PayloadBytes: len(page.Payload), Summary: mustJSON(map[string]any{
+				"season": year,
+				"page":   index + 1, "records": page.Records,
+			}), Payload: page.Payload,
+		}); err != nil {
 			return err
 		}
 	}
