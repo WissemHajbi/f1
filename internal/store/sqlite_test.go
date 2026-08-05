@@ -410,6 +410,14 @@ func TestUpsertLocationAndTeamRadio(t *testing.T) {
 	if err := db.UpsertTeamRadio(context.Background(), []domain.TeamRadio{radio}, now); err != nil {
 		t.Fatal(err)
 	}
+	// Refreshing the meeting registry must not cascade-delete synchronized session details.
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	locations, _, err = db.Location(context.Background(), domain.LocationQuery{SessionKey: 200, DriverNumber: 4, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
 	records, _, err := db.TeamRadio(context.Background(), domain.TeamRadioQuery{SessionKey: 200, Limit: 10})
 	if err != nil {
 		t.Fatal(err)

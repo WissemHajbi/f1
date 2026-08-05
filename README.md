@@ -7,6 +7,29 @@ Small Go foundation for validating F1 data providers, storing bounded snapshots 
 - Go 1.26+
 - Docker (optional)
 
+## Synchronize a complete database
+
+Build once and populate season data plus one or more race sessions in dependency-safe order:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File scripts/sync-all.ps1 `
+  -Season 2025 `
+  -SessionKeys 9839
+```
+
+This synchronizes meetings, drivers, calendar, standings, results, classifications, laps, stints, pits, weather, race control, overtakes, positions, intervals, and locally cached team radio. It is idempotent and safe to rerun after interruption.
+
+High-volume car data and physical location are opt-in and automatically divided into 15-minute chunks:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File scripts/sync-all.ps1 `
+  -Season 2025 `
+  -SessionKeys 9839 `
+  -IncludeTelemetry
+```
+
+With `-IncludeTelemetry`, the script discovers all session drivers and session start/end times, then tolerates empty chunks after retirements. It accepts one session per run because of the data volume. You can override discovery with `-DriverNumbers`, `-TelemetryFrom`, and `-TelemetryTo`.
+
 ## Run source probes
 
 ```bash

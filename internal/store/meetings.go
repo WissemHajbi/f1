@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"oidysts/internal/domain"
@@ -17,14 +18,16 @@ func (s *Store) ReplaceMeetings(ctx context.Context, year int, meetings []domain
 		return fmt.Errorf("begin meetings transaction: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM openf1_meetings WHERE year=?`, year); err != nil {
-		return fmt.Errorf("clear meetings: %w", err)
-	}
 	meetingStatement, err := tx.PrepareContext(ctx, `
 		INSERT INTO openf1_meetings
 		(meeting_key, year, name, official_name, location, country_key, country_code, country_name,
 		 circuit_key, circuit_short_name, date_start, gmt_offset, source, synced_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'openf1', ?)
+		ON CONFLICT(meeting_key) DO UPDATE SET year=excluded.year, name=excluded.name,
+			official_name=excluded.official_name, location=excluded.location, country_key=excluded.country_key,
+			country_code=excluded.country_code, country_name=excluded.country_name, circuit_key=excluded.circuit_key,
+			circuit_short_name=excluded.circuit_short_name, date_start=excluded.date_start,
+			gmt_offset=excluded.gmt_offset, synced_at=excluded.synced_at
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare meeting: %w", err)
@@ -35,12 +38,21 @@ func (s *Store) ReplaceMeetings(ctx context.Context, year int, meetings []domain
 		(session_key, meeting_key, year, name, type, location, country_code, country_name, circuit_key,
 		 circuit_short_name, date_start, date_end, gmt_offset, is_cancelled, source, synced_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'openf1', ?)
+		ON CONFLICT(session_key) DO UPDATE SET meeting_key=excluded.meeting_key, year=excluded.year,
+			name=excluded.name, type=excluded.type, location=excluded.location,
+			country_code=excluded.country_code, country_name=excluded.country_name,
+			circuit_key=excluded.circuit_key, circuit_short_name=excluded.circuit_short_name,
+			date_start=excluded.date_start, date_end=excluded.date_end, gmt_offset=excluded.gmt_offset,
+			is_cancelled=excluded.is_cancelled, synced_at=excluded.synced_at
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare session: %w", err)
 	}
 	defer sessionStatement.Close()
+	meetingKeys := make([]any, 0, len(meetings)+1)
+	sessionKeys := []any{year}
 	for _, meeting := range meetings {
+		meetingKeys = append(meetingKeys, meeting.Key)
 		if meeting.Year != year || meeting.Key <= 0 {
 			return fmt.Errorf("invalid meeting %d", meeting.Key)
 		}
@@ -52,6 +64,7 @@ func (s *Store) ReplaceMeetings(ctx context.Context, year int, meetings []domain
 			return fmt.Errorf("insert meeting %d: %w", meeting.Key, err)
 		}
 		for _, session := range meeting.Sessions {
+			sessionKeys = append(sessionKeys, session.Key)
 			_, err := sessionStatement.ExecContext(ctx, session.Key, meeting.Key, session.Year, session.Name, session.Type,
 				session.Location, session.CountryCode, session.CountryName, session.CircuitKey, session.CircuitShortName,
 				session.DateStart.UTC().Format(time.RFC3339Nano), session.DateEnd.UTC().Format(time.RFC3339Nano),
@@ -60,6 +73,19 @@ func (s *Store) ReplaceMeetings(ctx context.Context, year int, meetings []domain
 				return fmt.Errorf("insert session %d: %w", session.Key, err)
 			}
 		}
+	}
+	if len(sessionKeys) > 1 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(sessionKeys)-1), ",")
+		if _, err := tx.ExecContext(ctx, `DELETE FROM openf1_sessions WHERE year=? AND session_key NOT IN (`+placeholders+`)`, sessionKeys...); err != nil {
+			return fmt.Errorf("delete stale sessions: %w", err)
+		}
+	} else if _, err := tx.ExecContext(ctx, `DELETE FROM openf1_sessions WHERE year=?`, year); err != nil {
+		return fmt.Errorf("delete stale sessions: %w", err)
+	}
+	meetingArgs := append([]any{year}, meetingKeys...)
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(meetingKeys)), ",")
+	if _, err := tx.ExecContext(ctx, `DELETE FROM openf1_meetings WHERE year=? AND meeting_key NOT IN (`+placeholders+`)`, meetingArgs...); err != nil {
+		return fmt.Errorf("delete stale meetings: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit meetings: %w", err)
