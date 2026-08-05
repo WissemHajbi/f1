@@ -46,3 +46,31 @@ CREATE TABLE IF NOT EXISTS drivers (
 );
 CREATE INDEX IF NOT EXISTS idx_drivers_session
     ON drivers(session_key, driver_number);
+
+CREATE TABLE IF NOT EXISTS events (
+    season          INTEGER NOT NULL,
+    round           INTEGER NOT NULL,
+    name            TEXT NOT NULL,
+    source_url      TEXT NOT NULL,
+    race_at         TEXT NOT NULL,
+    circuit_id      TEXT NOT NULL,
+    circuit_name    TEXT NOT NULL,
+    locality        TEXT NOT NULL,
+    country         TEXT NOT NULL,
+    latitude        REAL NOT NULL,
+    longitude       REAL NOT NULL,
+    source          TEXT NOT NULL,
+    synced_at       TEXT NOT NULL,
+    PRIMARY KEY (season, round)
+);
+CREATE INDEX IF NOT EXISTS idx_events_race_at ON events(race_at);
+
+CREATE TABLE IF NOT EXISTS event_sessions (
+    season    INTEGER NOT NULL,
+    round     INTEGER NOT NULL,
+    type      TEXT NOT NULL,
+    start_at  TEXT NOT NULL,
+    PRIMARY KEY (season, round, type),
+    FOREIGN KEY (season, round) REFERENCES events(season, round) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_event_sessions_start ON event_sessions(start_at);

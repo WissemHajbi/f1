@@ -46,4 +46,4 @@ flowchart TB
 - `cmd/sync`: explicit provider-to-normalized-database ingestion.
 - `cmd/api`: database-backed client API.
 
-Driver rosters and sessions are now normalized; `GET /v1/drivers` reads only SQLite. Raw snapshots remain diagnostic evidence. Next, add normalized events, standings, results, articles, teams, upgrades, and asset provenance. High-frequency telemetry should use chunked compressed blobs or derived samples rather than one SQLite row per frame.
+Driver rosters, OpenF1 sessions, Jolpica events, and event schedules are normalized. `GET /v1/drivers`, `GET /v1/calendar`, and `GET /v1/calendar/next` read only SQLite. Raw snapshots remain diagnostic evidence. Next, add normalized standings, results, articles, teams, upgrades, and asset provenance. High-frequency telemetry should use chunked compressed blobs or derived samples rather than one SQLite row per frame.

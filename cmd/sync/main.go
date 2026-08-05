@@ -11,6 +11,7 @@ import (
 
 	"oidysts/internal/config"
 	"oidysts/internal/fetch"
+	"oidysts/internal/jolpica"
 	"oidysts/internal/openf1"
 	"oidysts/internal/store"
 )
@@ -18,12 +19,12 @@ import (
 func main() {
 	var resource string
 	var year int
-	flag.StringVar(&resource, "resource", "drivers", "resource to sync (currently: drivers)")
+	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers or calendar")
 	flag.IntVar(&year, "year", 2025, "season to sync")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if resource != "drivers" {
+	if resource != "drivers" && resource != "calendar" {
 		logger.Error("unsupported resource", "resource", resource)
 		os.Exit(2)
 	}
@@ -34,18 +35,29 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	client := openf1.New(fetch.New(cfg.Timeout, cfg.UserAgent, cfg.MaxBody))
-	result, err := client.LatestCompletedRaceRoster(ctx, year)
+	upstream := fetch.New(cfg.Timeout, cfg.UserAgent, cfg.MaxBody)
+
+	switch resource {
+	case "drivers":
+		err = syncDrivers(ctx, db, upstream, year)
+	case "calendar":
+		err = syncCalendar(ctx, db, upstream, year)
+	}
 	if err != nil {
-		logger.Error("fetch driver roster", "error", err)
+		logger.Error("sync failed", "resource", resource, "year", year, "error", err)
 		os.Exit(1)
 	}
+}
+
+func syncDrivers(ctx context.Context, db *store.Store, upstream *fetch.Client, year int) error {
+	result, err := openf1.New(upstream).LatestCompletedRaceRoster(ctx, year)
+	if err != nil {
+		return err
+	}
 	if err := db.SaveDriverRoster(ctx, result.Roster); err != nil {
-		logger.Error("save driver roster", "error", err)
-		os.Exit(1)
+		return err
 	}
 	summary, _ := json.Marshal(map[string]any{
 		"season": year, "session_key": result.Roster.Session.Key, "drivers": len(result.Roster.Drivers),
@@ -57,10 +69,31 @@ func main() {
 			StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Roster.Drivers), PayloadBytes: len(result.DriversPayload), Summary: summary, Payload: result.DriversPayload},
 	} {
 		if err := db.Save(ctx, snapshot); err != nil {
-			logger.Error("save source snapshot", "resource", snapshot.Resource, "error", err)
-			os.Exit(1)
+			return err
 		}
 	}
 	fmt.Printf("SYNC drivers season=%d session=%d (%s) records=%d\n", year, result.Roster.Session.Key,
 		result.Roster.Session.Location, len(result.Roster.Drivers))
+	return nil
+}
+
+func syncCalendar(ctx context.Context, db *store.Store, upstream *fetch.Client, year int) error {
+	result, err := jolpica.New(upstream).Calendar(ctx, year)
+	if err != nil {
+		return err
+	}
+	if err := db.ReplaceCalendar(ctx, year, result.Events); err != nil {
+		return err
+	}
+	syncedAt := result.Events[0].SyncedAt
+	summary, _ := json.Marshal(map[string]any{"season": year, "events": len(result.Events)})
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "jolpica", Resource: "calendar_sync", Endpoint: result.Endpoint, FetchedAt: syncedAt,
+		StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Events),
+		PayloadBytes: len(result.Payload), Summary: summary, Payload: result.Payload,
+	}); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC calendar season=%d events=%d\n", year, len(result.Events))
+	return nil
 }

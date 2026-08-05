@@ -31,6 +31,36 @@ func TestSaveAndLatest(t *testing.T) {
 	}
 }
 
+func TestReplaceAndReadCalendar(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	raceAt := now.Add(24 * time.Hour)
+	practiceAt := now.Add(12 * time.Hour)
+	events := []domain.Event{{
+		Season: 2025, Round: 1, Name: "Test Grand Prix", SourceURL: "https://example.test/race", RaceAt: &raceAt,
+		Circuit:  domain.Circuit{ID: "test", Name: "Test Circuit", Locality: "City", Country: "Country", Latitude: 1.2, Longitude: 3.4},
+		Sessions: []domain.EventSession{{Type: "practice_1", StartAt: &practiceAt}, {Type: "race", StartAt: &raceAt}}, SyncedAt: now,
+	}}
+	if err := db.ReplaceCalendar(context.Background(), 2025, events); err != nil {
+		t.Fatal(err)
+	}
+	calendar, err := db.Calendar(context.Background(), 2025)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calendar) != 1 || len(calendar[0].Sessions) != 2 {
+		t.Fatalf("unexpected calendar: %+v", calendar)
+	}
+	next, err := db.NextEvent(context.Background(), now)
+	if err != nil || next.Round != 1 {
+		t.Fatalf("next=%+v err=%v", next, err)
+	}
+}
+
 func TestSaveAndReadDriverRoster(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {
