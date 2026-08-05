@@ -30,6 +30,19 @@ powershell.exe -ExecutionPolicy Bypass -File scripts/sync-all.ps1 `
 
 With `-IncludeTelemetry`, the script discovers all session drivers and session start/end times, then tolerates empty chunks after retirements. It accepts one session per run because of the data volume. You can override discovery with `-DriverNumbers`, `-TelemetryFrom`, and `-TelemetryTo`.
 
+## Run the mobile app
+
+The Expo TypeScript client lives in `mobile/` and includes Paddock, Calendar, Standings, Drivers, race timeline, and track replay screens.
+
+```powershell
+go run ./cmd/api
+cd mobile
+npm install
+npm start
+```
+
+Android emulators use `http://10.0.2.2:8080`; iOS simulators and web use `http://localhost:8080`. For a physical device, set `EXPO_PUBLIC_API_URL` in `mobile/.env` to the computer's LAN address. See `mobile/README.md`.
+
 ## Run source probes
 
 ```bash
