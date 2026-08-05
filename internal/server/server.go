@@ -2,8 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"oidysts/internal/store"
@@ -19,6 +21,7 @@ func New(db *store.Store, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/health", s.health)
 	mux.HandleFunc("GET /v1/sources", s.sources)
+	mux.HandleFunc("GET /v1/drivers", s.drivers)
 	return requestLog(logger, mux)
 }
 
@@ -41,6 +44,27 @@ func (s *Server) sources(w http.ResponseWriter, r *http.Request) {
 		items = []store.Snapshot{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (s *Server) drivers(w http.ResponseWriter, r *http.Request) {
+	year, err := strconv.Atoi(r.URL.Query().Get("season"))
+	if err != nil || year < 1950 || year > 2100 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "season must be a year between 1950 and 2100"})
+		return
+	}
+	roster, err := s.store.LatestDriverRoster(r.Context(), year)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "drivers not synced for requested season"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list drivers", "season", year, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": roster.Drivers, "meta": map[string]any{
+		"season": roster.Session.Year, "session": roster.Session, "synced_at": roster.SyncedAt,
+	}})
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

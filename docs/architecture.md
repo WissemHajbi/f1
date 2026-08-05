@@ -38,10 +38,12 @@ flowchart TB
 ## Package boundaries
 
 - `internal/fetch`: safe upstream HTTP transport.
+- `internal/openf1`: typed OpenF1 ingestion client.
 - `internal/probe`: source-specific validation and summaries.
-- `internal/store`: SQLite schema and persistence.
+- `internal/store`: SQLite schema, raw snapshots, and normalized persistence.
 - `internal/server`: small HTTP surface.
 - `cmd/probe`: explicit external integration smoke test.
-- `cmd/api`: backend process.
+- `cmd/sync`: explicit provider-to-normalized-database ingestion.
+- `cmd/api`: database-backed client API.
 
-Raw snapshots are diagnostic evidence, not the final application schema. Next, define screens and add normalized tables for events, sessions, standings, results, articles, teams, upgrades, and asset provenance. High-frequency telemetry should use chunked compressed blobs or derived samples rather than one SQLite row per frame.
+Driver rosters and sessions are now normalized; `GET /v1/drivers` reads only SQLite. Raw snapshots remain diagnostic evidence. Next, add normalized events, standings, results, articles, teams, upgrades, and asset provenance. High-frequency telemetry should use chunked compressed blobs or derived samples rather than one SQLite row per frame.

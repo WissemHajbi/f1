@@ -16,8 +16,9 @@ import (
 const baseURL = "https://api.openf1.org/v1"
 
 type Client struct {
-	fetch *fetch.Client
-	now   func() time.Time
+	fetch   *fetch.Client
+	now     func() time.Time
+	baseURL string
 }
 
 type RosterResult struct {
@@ -29,11 +30,11 @@ type RosterResult struct {
 }
 
 func New(client *fetch.Client) *Client {
-	return &Client{fetch: client, now: time.Now}
+	return &Client{fetch: client, now: time.Now, baseURL: baseURL}
 }
 
 func (c *Client) LatestCompletedRaceRoster(ctx context.Context, year int) (RosterResult, error) {
-	sessionsURL := baseURL + "/sessions?year=" + strconv.Itoa(year) + "&session_name=" + url.QueryEscape("Race")
+	sessionsURL := c.baseURL + "/sessions?year=" + strconv.Itoa(year) + "&session_name=" + url.QueryEscape("Race")
 	response, err := c.fetch.Get(ctx, sessionsURL, "application/json")
 	if err != nil {
 		return RosterResult{}, fmt.Errorf("fetch sessions: %w", err)
@@ -56,7 +57,7 @@ func (c *Client) LatestCompletedRaceRoster(ctx context.Context, year int) (Roste
 	sort.Slice(completed, func(i, j int) bool { return completed[i].DateEnd.After(completed[j].DateEnd) })
 	session := completed[0]
 
-	driversURL := baseURL + "/drivers?session_key=" + strconv.Itoa(session.Key)
+	driversURL := c.baseURL + "/drivers?session_key=" + strconv.Itoa(session.Key)
 	response, err = c.fetch.Get(ctx, driversURL, "application/json")
 	if err != nil {
 		return RosterResult{}, fmt.Errorf("fetch drivers: %w", err)
@@ -75,7 +76,7 @@ func (c *Client) LatestCompletedRaceRoster(ctx context.Context, year int) (Roste
 	}
 	sort.Slice(drivers, func(i, j int) bool { return drivers[i].Number < drivers[j].Number })
 	return RosterResult{
-		Roster: domain.DriverRoster{Session: session, Drivers: drivers, SyncedAt: c.now().UTC()},
+		Roster:      domain.DriverRoster{Session: session, Drivers: drivers, SyncedAt: c.now().UTC()},
 		SessionsURL: sessionsURL, SessionsPayload: sessionsPayload,
 		DriversURL: driversURL, DriversPayload: response.Body,
 	}, nil

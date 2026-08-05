@@ -17,13 +17,24 @@ Successful payloads are saved to `data/oidysts.db`. Select providers with `-sour
 
 These are real external integration checks, so run them intentionally rather than in unit-test CI. Historical OpenF1 examples use a small fixed 2025 session/time window to prevent accidental large telemetry downloads.
 
+## Sync normalized drivers
+
+The sync command contacts OpenF1, selects the latest race that ended at least 30 minutes ago, and atomically stores its complete driver roster in SQLite:
+
+```bash
+go run ./cmd/sync -resource drivers -year 2025
+```
+
 ## Run API
 
 ```bash
 go run ./cmd/api
 curl http://localhost:8080/v1/health
 curl http://localhost:8080/v1/sources
+curl "http://localhost:8080/v1/drivers?season=2025"
 ```
+
+`GET /v1/drivers` reads SQLite only. It never contacts OpenF1. If the season has not been synced, it returns `404`.
 
 Environment:
 
@@ -42,6 +53,7 @@ Use an identifiable versioned User-Agent in deployed environments.
 ```bash
 docker compose build
 docker compose run --rm api /app/probe -sources all -year 2025
+docker compose run --rm api /app/sync -resource drivers -year 2025
 docker compose up -d
 ```
 
