@@ -26,6 +26,8 @@ func New(db *store.Store, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /v1/calendar/next", s.nextEvent)
 	mux.HandleFunc("GET /v1/standings/drivers", s.driverStandings)
 	mux.HandleFunc("GET /v1/standings/constructors", s.constructorStandings)
+	mux.HandleFunc("GET /v1/results", s.results)
+	mux.HandleFunc("GET /v1/results/latest", s.latestResult)
 	return requestLog(logger, mux)
 }
 
@@ -69,6 +71,48 @@ func (s *Server) drivers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": roster.Drivers, "meta": map[string]any{
 		"season": roster.Session.Year, "session": roster.Session, "synced_at": roster.SyncedAt,
 	}})
+}
+
+func (s *Server) results(w http.ResponseWriter, r *http.Request) {
+	year, err := requestedSeason(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	var round *int
+	if value := r.URL.Query().Get("round"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "round must be a positive integer"})
+			return
+		}
+		round = &parsed
+	}
+	races, err := s.store.Results(r.Context(), year, round)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "results not synced for requested season or round"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("list results", "season", year, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": races, "meta": map[string]any{"season": year, "races": len(races)}})
+}
+
+func (s *Server) latestResult(w http.ResponseWriter, r *http.Request) {
+	race, err := s.store.LatestResult(r.Context(), time.Now().UTC())
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no completed results have been synced"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("get latest result", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": race})
 }
 
 func (s *Server) driverStandings(w http.ResponseWriter, r *http.Request) {

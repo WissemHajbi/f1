@@ -88,6 +88,37 @@ func TestReplaceAndReadStandings(t *testing.T) {
 	}
 }
 
+func TestReplaceAndReadResults(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	millis := int64(5_400_000)
+	races := []domain.RaceClassification{{Season: 2025, Round: 1, Name: "Test Grand Prix", RaceAt: &now,
+		Circuit: domain.Circuit{ID: "test", Name: "Test Circuit", Locality: "City", Country: "Country"}, SyncedAt: now,
+		Results: []domain.RaceResult{{Position: 1, PositionText: "1", Points: 25, Grid: 2, Laps: 50,
+			Status: "Finished", TimeMillis: &millis, DriverID: "test", GivenName: "Test", FamilyName: "Driver",
+			Constructor: domain.StandingConstructor{ID: "team", Name: "Team"},
+			FastestLap:  &domain.FastestLap{Rank: 1, Lap: 42, Time: "1:20.000", AverageSpeed: 210.5, SpeedUnits: "kph"}}}}}
+	if err := db.ReplaceResults(context.Background(), 2025, races); err != nil {
+		t.Fatal(err)
+	}
+	round := 1
+	got, err := db.Results(context.Background(), 2025, &round)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := db.LatestResult(context.Background(), now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || len(got[0].Results) != 1 || got[0].Results[0].FastestLap == nil || latest.Round != 1 {
+		t.Fatalf("results=%+v latest=%+v", got, latest)
+	}
+}
+
 func TestSaveAndReadDriverRoster(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

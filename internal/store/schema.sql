@@ -118,3 +118,50 @@ CREATE TABLE IF NOT EXISTS constructor_standings (
     PRIMARY KEY (season, constructor_id)
 );
 CREATE INDEX IF NOT EXISTS idx_constructor_standings_position ON constructor_standings(season, position);
+
+CREATE TABLE IF NOT EXISTS result_races (
+    season       INTEGER NOT NULL,
+    round        INTEGER NOT NULL,
+    name         TEXT NOT NULL,
+    race_at      TEXT NOT NULL,
+    circuit_id   TEXT NOT NULL,
+    circuit_name TEXT NOT NULL,
+    locality     TEXT NOT NULL,
+    country      TEXT NOT NULL,
+    latitude     REAL NOT NULL,
+    longitude    REAL NOT NULL,
+    source       TEXT NOT NULL,
+    synced_at    TEXT NOT NULL,
+    PRIMARY KEY (season, round)
+);
+CREATE INDEX IF NOT EXISTS idx_result_races_date ON result_races(race_at DESC);
+
+CREATE TABLE IF NOT EXISTS race_results (
+    season                  INTEGER NOT NULL,
+    round                   INTEGER NOT NULL,
+    position                INTEGER NOT NULL,
+    position_text           TEXT NOT NULL,
+    points                  REAL NOT NULL,
+    grid_position           INTEGER NOT NULL,
+    laps                    INTEGER NOT NULL,
+    status                  TEXT NOT NULL,
+    result_time             TEXT NOT NULL,
+    time_millis             INTEGER,
+    driver_id               TEXT NOT NULL,
+    driver_number           TEXT NOT NULL,
+    driver_code             TEXT NOT NULL,
+    given_name              TEXT NOT NULL,
+    family_name             TEXT NOT NULL,
+    driver_nationality      TEXT NOT NULL,
+    constructor_id          TEXT NOT NULL,
+    constructor_name        TEXT NOT NULL,
+    constructor_nationality TEXT NOT NULL,
+    fastest_lap_rank        INTEGER,
+    fastest_lap_number      INTEGER,
+    fastest_lap_time        TEXT,
+    fastest_lap_speed       REAL,
+    fastest_lap_speed_units TEXT,
+    PRIMARY KEY (season, round, driver_id),
+    FOREIGN KEY (season, round) REFERENCES result_races(season, round) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_race_results_position ON race_results(season, round, position);

@@ -19,12 +19,12 @@ import (
 func main() {
 	var resource string
 	var year int
-	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, calendar, or standings")
+	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, calendar, standings, or results")
 	flag.IntVar(&year, "year", 2025, "season to sync")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if resource != "drivers" && resource != "calendar" && resource != "standings" {
+	if resource != "drivers" && resource != "calendar" && resource != "standings" && resource != "results" {
 		logger.Error("unsupported resource", "resource", resource)
 		os.Exit(2)
 	}
@@ -46,6 +46,8 @@ func main() {
 		err = syncCalendar(ctx, db, upstream, year)
 	case "standings":
 		err = syncStandings(ctx, db, upstream, year)
+	case "results":
+		err = syncResults(ctx, db, upstream, year)
 	}
 	if err != nil {
 		logger.Error("sync failed", "resource", resource, "year", year, "error", err)
@@ -65,10 +67,14 @@ func syncDrivers(ctx context.Context, db *store.Store, upstream *fetch.Client, y
 		"season": year, "session_key": result.Roster.Session.Key, "drivers": len(result.Roster.Drivers),
 	})
 	for _, snapshot := range []store.Snapshot{
-		{Source: "openf1", Resource: "sessions_sync", Endpoint: result.SessionsURL, FetchedAt: result.Roster.SyncedAt,
-			StatusCode: 200, ContentType: "application/json", RecordCount: 1, PayloadBytes: len(result.SessionsPayload), Summary: summary, Payload: result.SessionsPayload},
-		{Source: "openf1", Resource: "drivers_sync", Endpoint: result.DriversURL, FetchedAt: result.Roster.SyncedAt,
-			StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Roster.Drivers), PayloadBytes: len(result.DriversPayload), Summary: summary, Payload: result.DriversPayload},
+		{
+			Source: "openf1", Resource: "sessions_sync", Endpoint: result.SessionsURL, FetchedAt: result.Roster.SyncedAt,
+			StatusCode: 200, ContentType: "application/json", RecordCount: 1, PayloadBytes: len(result.SessionsPayload), Summary: summary, Payload: result.SessionsPayload,
+		},
+		{
+			Source: "openf1", Resource: "drivers_sync", Endpoint: result.DriversURL, FetchedAt: result.Roster.SyncedAt,
+			StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Roster.Drivers), PayloadBytes: len(result.DriversPayload), Summary: summary, Payload: result.DriversPayload,
+		},
 	} {
 		if err := db.Save(ctx, snapshot); err != nil {
 			return err
@@ -76,6 +82,32 @@ func syncDrivers(ctx context.Context, db *store.Store, upstream *fetch.Client, y
 	}
 	fmt.Printf("SYNC drivers season=%d session=%d (%s) records=%d\n", year, result.Roster.Session.Key,
 		result.Roster.Session.Location, len(result.Roster.Drivers))
+	return nil
+}
+
+func syncResults(ctx context.Context, db *store.Store, upstream *fetch.Client, year int) error {
+	result, err := jolpica.New(upstream).Results(ctx, year)
+	if err != nil {
+		return err
+	}
+	if err := db.ReplaceResults(ctx, year, result.Races); err != nil {
+		return err
+	}
+	syncedAt := result.Races[0].SyncedAt
+	total := 0
+	for index, page := range result.Pages {
+		total += page.Records
+		snapshot := store.Snapshot{
+			Source: "jolpica", Resource: fmt.Sprintf("results_sync_page_%d", index+1),
+			Endpoint: page.Endpoint, FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json",
+			RecordCount: page.Records, PayloadBytes: len(page.Payload),
+			Summary: mustJSON(map[string]any{"season": year, "page": index + 1, "records": page.Records}), Payload: page.Payload,
+		}
+		if err := db.Save(ctx, snapshot); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("SYNC results season=%d races=%d classifications=%d pages=%d\n", year, len(result.Races), total, len(result.Pages))
 	return nil
 }
 
@@ -89,12 +121,16 @@ func syncStandings(ctx context.Context, db *store.Store, upstream *fetch.Client,
 	}
 	syncedAt := result.Drivers[0].SyncedAt
 	for _, snapshot := range []store.Snapshot{
-		{Source: "jolpica", Resource: "driver_standings_sync", Endpoint: result.DriversEndpoint, FetchedAt: syncedAt,
+		{
+			Source: "jolpica", Resource: "driver_standings_sync", Endpoint: result.DriversEndpoint, FetchedAt: syncedAt,
 			StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Drivers), PayloadBytes: len(result.DriversPayload),
-			Summary: mustJSON(map[string]any{"season": year, "standings": len(result.Drivers)}), Payload: result.DriversPayload},
-		{Source: "jolpica", Resource: "constructor_standings_sync", Endpoint: result.ConstructorsEndpoint, FetchedAt: syncedAt,
+			Summary: mustJSON(map[string]any{"season": year, "standings": len(result.Drivers)}), Payload: result.DriversPayload,
+		},
+		{
+			Source: "jolpica", Resource: "constructor_standings_sync", Endpoint: result.ConstructorsEndpoint, FetchedAt: syncedAt,
 			StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Constructors), PayloadBytes: len(result.ConstructorsPayload),
-			Summary: mustJSON(map[string]any{"season": year, "standings": len(result.Constructors)}), Payload: result.ConstructorsPayload},
+			Summary: mustJSON(map[string]any{"season": year, "standings": len(result.Constructors)}), Payload: result.ConstructorsPayload,
+		},
 	} {
 		if err := db.Save(ctx, snapshot); err != nil {
 			return err
