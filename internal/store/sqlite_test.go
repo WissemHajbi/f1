@@ -204,6 +204,62 @@ func TestUpsertAndReadLaps(t *testing.T) {
 	}
 }
 
+func TestUpsertAndReadStints(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test", DateStart: now, SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race", DateStart: now, DateEnd: now.Add(time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	lapEnd, tyreAge := 20, 2
+	stints := []domain.Stint{{SessionKey: 200, MeetingKey: 100, DriverNumber: 4, StintNumber: 1,
+		LapStart: 1, LapEnd: &lapEnd, Compound: "MEDIUM", TyreAgeAtStart: &tyreAge}}
+	if err := db.UpsertStints(context.Background(), stints, now); err != nil {
+		t.Fatal(err)
+	}
+	driver := 4
+	got, truncated, err := db.Stints(context.Background(), domain.StintQuery{SessionKey: 200, DriverNumber: &driver, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || len(got) != 1 || got[0].Compound != "MEDIUM" || got[0].TyreAgeAtStart == nil {
+		t.Fatalf("stints=%+v truncated=%v", got, truncated)
+	}
+}
+
+func TestUpsertAndReadPitStops(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	meetings := []domain.Meeting{{Key: 100, Year: 2025, Name: "Test", DateStart: now, SyncedAt: now,
+		Sessions: []domain.MeetingSession{{Key: 200, MeetingKey: 100, Year: 2025, Name: "Race", Type: "Race", DateStart: now, DateEnd: now.Add(time.Hour)}}}}
+	if err := db.ReplaceMeetings(context.Background(), 2025, meetings); err != nil {
+		t.Fatal(err)
+	}
+	duration := 22.8
+	items := []domain.PitStop{{SessionKey: 200, MeetingKey: 100, DriverNumber: 4, LapNumber: 20,
+		Timestamp: now.Add(30 * time.Minute), Duration: &duration}}
+	if err := db.UpsertPitStops(context.Background(), items, now); err != nil {
+		t.Fatal(err)
+	}
+	driver := 4
+	got, truncated, err := db.PitStops(context.Background(), domain.PitStopQuery{SessionKey: 200, DriverNumber: &driver, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || len(got) != 1 || got[0].Duration == nil || *got[0].Duration != 22.8 {
+		t.Fatalf("pit stops=%+v truncated=%v", got, truncated)
+	}
+}
+
 func TestSaveAndReadDriverRoster(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

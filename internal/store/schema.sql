@@ -221,6 +221,33 @@ CREATE TABLE IF NOT EXISTS car_data_samples (
     PRIMARY KEY (session_key, driver_number, sampled_at)
 ) WITHOUT ROWID;
 
+CREATE TABLE IF NOT EXISTS pit_stops (
+    session_key   INTEGER NOT NULL REFERENCES openf1_sessions(session_key) ON DELETE CASCADE,
+    driver_number INTEGER NOT NULL,
+    stopped_at    TEXT NOT NULL,
+    meeting_key   INTEGER NOT NULL,
+    lap_number    INTEGER NOT NULL,
+    duration      REAL,
+    source        TEXT NOT NULL,
+    synced_at     TEXT NOT NULL,
+    PRIMARY KEY (session_key, driver_number, stopped_at)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_pit_stops_session_lap ON pit_stops(session_key, lap_number);
+
+CREATE TABLE IF NOT EXISTS stints (
+    session_key      INTEGER NOT NULL REFERENCES openf1_sessions(session_key) ON DELETE CASCADE,
+    driver_number    INTEGER NOT NULL,
+    stint_number     INTEGER NOT NULL,
+    meeting_key      INTEGER NOT NULL,
+    lap_start        INTEGER NOT NULL,
+    lap_end          INTEGER,
+    compound         TEXT NOT NULL,
+    tyre_age_at_start INTEGER,
+    source           TEXT NOT NULL,
+    synced_at        TEXT NOT NULL,
+    PRIMARY KEY (session_key, driver_number, stint_number)
+) WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS laps (
     session_key      INTEGER NOT NULL REFERENCES openf1_sessions(session_key) ON DELETE CASCADE,
     driver_number    INTEGER NOT NULL,
