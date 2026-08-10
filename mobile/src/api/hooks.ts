@@ -1,3 +1,5 @@
+import { keepPreviousData } from '@tanstack/react-query';
+
 import { api, DEFAULT_SEASON } from './client';
 
 export const queries = {
@@ -27,10 +29,17 @@ export const queries = {
     staleTime: 60 * 60_000,
     enabled: Number.isInteger(round) && round > 0,
   }),
-  raceHub: (round: number, driverNumber?: number, season = DEFAULT_SEASON) => ({
-    queryKey: ['race-hub', season, round, driverNumber ?? 'default'],
-    queryFn: () => api.raceHub(round, driverNumber, season),
+  raceHub: (round: number, driverNumber?: number, lapNumber?: number, season = DEFAULT_SEASON) => ({
+    queryKey: ['race-hub', season, round, driverNumber ?? 'default', lapNumber ?? 'best'],
+    queryFn: () => api.raceHub(round, driverNumber, lapNumber, season),
     staleTime: 10 * 60_000,
     enabled: Number.isInteger(round) && round > 0,
+    placeholderData: keepPreviousData,
+  }),
+  teamRadio: (sessionKey: number, driverNumber: number, enabled = true) => ({
+    queryKey: ['team-radio', sessionKey, driverNumber],
+    queryFn: () => api.teamRadio(sessionKey, driverNumber),
+    staleTime: 60 * 60_000,
+    enabled: enabled && sessionKey > 0 && driverNumber > 0,
   }),
 };

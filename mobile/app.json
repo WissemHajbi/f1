@@ -40,7 +40,9 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

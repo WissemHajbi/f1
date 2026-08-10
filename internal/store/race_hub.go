@@ -34,8 +34,8 @@ func (s *Store) UpsertRaceSessionLink(ctx context.Context, season, round, sessio
 	return nil
 }
 
-func (s *Store) RaceHub(ctx context.Context, season, round int, requestedDriver *int) (domain.RaceHub, error) {
-	hub := domain.RaceHub{Season: season, Round: round, Drivers: []domain.RaceDriverStats{}, Laps: []domain.RaceLapStat{}, Track: []domain.TrackPoint{}}
+func (s *Store) RaceHub(ctx context.Context, season, round int, requestedDriver, requestedLap *int) (domain.RaceHub, error) {
+	hub := domain.RaceHub{Season: season, Round: round, Drivers: []domain.RaceDriverStats{}, Laps: []domain.RaceLapStat{}, Track: []domain.TrackPoint{}, DriverTrace: []domain.TrackPoint{}}
 	if err := s.db.QueryRowContext(ctx, `SELECT session_key FROM race_session_links WHERE season=? AND round=?`, season, round).Scan(&hub.SessionKey); err != nil {
 		if err == sql.ErrNoRows {
 			return domain.RaceHub{}, ErrNotFound
@@ -117,6 +117,9 @@ func (s *Store) RaceHub(ctx context.Context, season, round int, requestedDriver 
 	if err := s.loadRaceHubTrack(ctx, &hub); err != nil {
 		return domain.RaceHub{}, err
 	}
+	if err := s.loadRaceHubDriverTrace(ctx, &hub, requestedLap); err != nil {
+		return domain.RaceHub{}, err
+	}
 	return hub, nil
 }
 
@@ -192,6 +195,98 @@ func (s *Store) loadRaceHubTrack(ctx context.Context, hub *domain.RaceHub) error
 	hub.Track = downsampleTrack(points, 220)
 	hub.TrackSourceDriver = &driver
 	hub.TrackSourceLap = &lap
+	return nil
+}
+
+func (s *Store) BestLapWindow(ctx context.Context, sessionKey, driverNumber int) (int, time.Time, time.Time, error) {
+	var lap int
+	err := s.db.QueryRowContext(ctx, `SELECT lap_number FROM laps WHERE session_key=? AND driver_number=?
+		AND date_start IS NOT NULL AND lap_duration IS NOT NULL AND is_pit_out_lap=0
+		ORDER BY lap_duration LIMIT 1`, sessionKey, driverNumber).Scan(&lap)
+	if err == sql.ErrNoRows {
+		return 0, time.Time{}, time.Time{}, ErrNotFound
+	}
+	if err != nil {
+		return 0, time.Time{}, time.Time{}, fmt.Errorf("query best lap: %w", err)
+	}
+	from, to, err := s.LapWindow(ctx, sessionKey, driverNumber, lap)
+	return lap, from, to, err
+}
+
+func (s *Store) LapWindow(ctx context.Context, sessionKey, driverNumber, lapNumber int) (time.Time, time.Time, error) {
+	var start string
+	var duration float64
+	err := s.db.QueryRowContext(ctx, `SELECT date_start, lap_duration FROM laps
+		WHERE session_key=? AND driver_number=? AND lap_number=? AND date_start IS NOT NULL AND lap_duration IS NOT NULL`,
+		sessionKey, driverNumber, lapNumber).Scan(&start, &duration)
+	if err == sql.ErrNoRows {
+		return time.Time{}, time.Time{}, ErrNotFound
+	}
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("query lap window: %w", err)
+	}
+	startedAt, err := time.Parse(telemetryTimeLayout, start)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("parse lap start: %w", err)
+	}
+	return startedAt.Add(-time.Second), startedAt.Add(time.Duration(duration*float64(time.Second)) + time.Second), nil
+}
+
+func (s *Store) loadRaceHubDriverTrace(ctx context.Context, hub *domain.RaceHub, requestedLap *int) error {
+	var lap int
+	var start string
+	var duration float64
+	filter := `AND l.lap_duration=(SELECT MIN(f.lap_duration) FROM laps f WHERE f.session_key=l.session_key
+		AND f.driver_number=l.driver_number AND f.lap_duration IS NOT NULL AND f.is_pit_out_lap=0)`
+	args := []any{hub.SessionKey, hub.SelectedDriverNumber}
+	if requestedLap != nil {
+		filter = `AND l.lap_number=?`
+		args = append(args, *requestedLap)
+	}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT l.lap_number, l.date_start, l.lap_duration
+		FROM laps l JOIN location_samples p ON p.session_key=l.session_key AND p.driver_number=l.driver_number
+		 AND julianday(p.sampled_at)>=julianday(l.date_start)
+		 AND julianday(p.sampled_at)<=julianday(l.date_start)+(l.lap_duration/86400.0)
+		WHERE l.session_key=? AND l.driver_number=? AND l.date_start IS NOT NULL AND l.lap_duration IS NOT NULL `+filter+`
+		GROUP BY l.lap_number ORDER BY COUNT(*) DESC LIMIT 1`, args...).Scan(&lap, &start, &duration)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("select driver best-lap trace: %w", err)
+	}
+	startedAt, err := time.Parse(telemetryTimeLayout, start)
+	if err != nil {
+		return fmt.Errorf("parse driver trace start: %w", err)
+	}
+	endedAt := startedAt.Add(time.Duration(duration * float64(time.Second)))
+	rows, err := s.db.QueryContext(ctx, `SELECT sampled_at, x, y FROM location_samples
+		WHERE session_key=? AND driver_number=? AND sampled_at>=? AND sampled_at<=? ORDER BY sampled_at`,
+		hub.SessionKey, hub.SelectedDriverNumber, startedAt.Format(telemetryTimeLayout), endedAt.Format(telemetryTimeLayout))
+	if err != nil {
+		return fmt.Errorf("query driver best-lap trace: %w", err)
+	}
+	defer rows.Close()
+	points := []domain.TrackPoint{}
+	for rows.Next() {
+		var point domain.TrackPoint
+		var sampledAt string
+		if err := rows.Scan(&sampledAt, &point.X, &point.Y); err != nil {
+			return fmt.Errorf("scan driver trace point: %w", err)
+		}
+		parsed, err := time.Parse(telemetryTimeLayout, sampledAt)
+		if err != nil {
+			return fmt.Errorf("parse driver trace point time: %w", err)
+		}
+		point.Timestamp = &parsed
+		points = append(points, point)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate driver trace: %w", err)
+	}
+	hub.DriverTrace = points
+	hub.DriverTraceLap = &lap
 	return nil
 }
 

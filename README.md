@@ -19,7 +19,16 @@ powershell.exe -ExecutionPolicy Bypass -File scripts/sync-all.ps1 `
 
 This synchronizes meetings, drivers, calendar, standings, results, classifications, laps, stints, pits, weather, race control, overtakes, positions, intervals, and locally cached team radio. For season 2025/session 9839 it also persists the known round 24 race-session link. It is idempotent and safe to rerun after interruption.
 
-High-volume car data and physical location are opt-in and automatically divided into 15-minute chunks:
+Best-lap circuit traces can be synchronized for every driver with small bounded requests:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File scripts/sync-all.ps1 `
+  -Season 2025 `
+  -SessionKeys 9839 `
+  -IncludeBestLapTraces
+```
+
+Full high-volume car data and physical location are opt-in and automatically divided into 15-minute chunks:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File scripts/sync-all.ps1 `
@@ -67,6 +76,7 @@ go run ./cmd/sync -resource results -year 2025
 go run ./cmd/sync -resource classifications -year 2025
 go run ./cmd/sync -resource race-link -year 2025 -round 24 -session 9839
 go run ./cmd/sync -resource laps -session 9839
+go run ./cmd/sync -resource best-lap-location -session 9839 -driver 1
 go run ./cmd/sync -resource stints -session 9839
 go run ./cmd/sync -resource pit -session 9839
 go run ./cmd/sync -resource weather -session 9839
@@ -124,7 +134,7 @@ curl "http://localhost:8080/v1/car-data?session_key=9839&driver_number=1&limit=1
 
 All API endpoints read SQLite only. They never contact providers. Unsynced resources return `404`. `GET /v1/calendar/next` selects the earliest stored race whose race time is in the future.
 
-Lap, stint, and pit ingestion accept `-session` and an optional `-driver`; omit the driver to fetch the complete session. Laps include sector/mini-sector timing and speed traps. Stints include compound, lap range, and tyre age at the start. OpenF1 pit records provide the stop timestamp, lap, and pit duration; they do not provide separate entry/exit timestamps. Weather ingestion stores the complete session timeline; the API supports optional `from`, `to`, and `limit` parameters. Race-control events support optional `category`, `driver_number`, `from`, `to`, and `limit` filters. Overtake, position, and interval timelines support driver/time/limit filters; overtakes additionally support `overtaken_driver_number`. Interval labels such as `+1 LAP` are preserved alongside numeric seconds when available. Location ingestion requires one session, one driver, explicit timestamps, and a maximum 15-minute window. Team-radio sync caches audio in SQLite; returned `/v1/team-radio/{id}/audio` URLs stream locally with byte-range support, so clients never contact OpenF1. The unified `/v1/session-timeline` endpoint combines synchronized race control, overtakes, pit stops, positions, stints, team radio, and weather into one chronological feed. It supports optional `driver_number`, comma-separated `types`, `from`, `to`, and `limit` filters.
+Lap, stint, and pit ingestion accept `-session` and an optional `-driver`; omit the driver to fetch the complete session. Laps include sector/mini-sector timing and speed traps. Stints include compound, lap range, and tyre age at the start. OpenF1 pit records provide the stop timestamp, lap, and pit duration; they do not provide separate entry/exit timestamps. Weather ingestion stores the complete session timeline; the API supports optional `from`, `to`, and `limit` parameters. Race-control events support optional `category`, `driver_number`, `from`, `to`, and `limit` filters. Overtake, position, and interval timelines support driver/time/limit filters; overtakes additionally support `overtaken_driver_number`. Interval labels such as `+1 LAP` are preserved alongside numeric seconds when available. Location ingestion requires one session, one driver, explicit timestamps, and a maximum 15-minute window. `best-lap-location` derives the selected driver's fastest synchronized lap window and downloads only that bounded trace. Team-radio sync caches audio in SQLite; returned `/v1/team-radio/{id}/audio` URLs stream locally with byte-range support, so clients never contact OpenF1. The unified `/v1/session-timeline` endpoint combines synchronized race control, overtakes, pit stops, positions, stints, team radio, and weather into one chronological feed. It supports optional `driver_number`, comma-separated `types`, `from`, `to`, and `limit` filters.
 
 Car telemetry ingestion requires a previously synced OpenF1 session and an explicit time range no longer than 15 minutes. Re-running overlapping ranges is idempotent. The API defaults to 1,000 samples and permits at most 5,000 per response; use `from` and `to` RFC3339 filters for paging/range selection.
 

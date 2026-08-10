@@ -123,7 +123,12 @@ func (s *Server) raceHub(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	hub, err := s.store.RaceHub(r.Context(), season, round, driver)
+	lap, err := optionalPositiveInt(r, "lap_number")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	hub, err := s.store.RaceHub(r.Context(), season, round, driver, lap)
 	if errors.Is(err, store.ErrNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "race hub is not available for the requested race or driver"})
 		return

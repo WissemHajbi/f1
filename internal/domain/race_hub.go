@@ -49,8 +49,9 @@ type RaceLapStat struct {
 }
 
 type TrackPoint struct {
-	X int `json:"x"`
-	Y int `json:"y"`
+	X         int        `json:"x"`
+	Y         int        `json:"y"`
+	Timestamp *time.Time `json:"timestamp,omitempty"`
 }
 
 type RaceHub struct {
@@ -63,4 +64,6 @@ type RaceHub struct {
 	Track                []TrackPoint      `json:"track"`
 	TrackSourceDriver    *int              `json:"track_source_driver,omitempty"`
 	TrackSourceLap       *int              `json:"track_source_lap,omitempty"`
+	DriverTrace          []TrackPoint      `json:"driver_trace"`
+	DriverTraceLap       *int              `json:"driver_trace_lap,omitempty"`
 }

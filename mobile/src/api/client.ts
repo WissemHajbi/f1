@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import type { ApiEnvelope, CalendarEvent, ConstructorStanding, Driver, DriverStanding, RaceClassification, RaceHub } from './types';
+import type { ApiEnvelope, CalendarEvent, ConstructorStanding, Driver, DriverStanding, RaceClassification, RaceHub, TeamRadio } from './types';
 
 const localURL = Platform.select({ android: 'http://10.0.2.2:8080', default: 'http://localhost:8080' });
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || localURL).replace(/\/$/, '');
@@ -44,9 +44,13 @@ export const api = {
   raceResult: (round: number, season = DEFAULT_SEASON) =>
     get<ApiEnvelope<RaceClassification[]>>(`/v1/results?season=${encodeURIComponent(season)}&round=${encodeURIComponent(round)}`)
       .then((value) => value.data[0]),
-  raceHub: (round: number, driverNumber?: number, season = DEFAULT_SEASON) => {
+  teamRadio: (sessionKey: number, driverNumber: number) =>
+    get<ApiEnvelope<TeamRadio[]>>(`/v1/team-radio?session_key=${encodeURIComponent(sessionKey)}&driver_number=${encodeURIComponent(driverNumber)}&limit=100`)
+      .then((value) => value.data),
+  raceHub: (round: number, driverNumber?: number, lapNumber?: number, season = DEFAULT_SEASON) => {
     const driver = driverNumber ? `&driver_number=${encodeURIComponent(driverNumber)}` : '';
-    return get<ApiEnvelope<RaceHub>>(`/v1/race-hub?season=${encodeURIComponent(season)}&round=${encodeURIComponent(round)}${driver}`)
+    const lap = lapNumber ? `&lap_number=${encodeURIComponent(lapNumber)}` : '';
+    return get<ApiEnvelope<RaceHub>>(`/v1/race-hub?season=${encodeURIComponent(season)}&round=${encodeURIComponent(round)}${driver}${lap}`)
       .then((value) => value.data);
   },
 };

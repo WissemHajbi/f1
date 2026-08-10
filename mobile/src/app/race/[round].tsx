@@ -8,10 +8,8 @@ import { DEFAULT_SEASON } from '@/api/client';
 import { queries } from '@/api/hooks';
 import { Card } from '@/components/common/card';
 import { DataState } from '@/components/common/data-state';
-import { SectionTitle } from '@/components/common/section-title';
 import { PageHeader } from '@/components/layout/page-header';
 import { Screen } from '@/components/layout/screen';
-import { ClassificationRow } from '@/components/race/classification-row';
 import { RaceHubPanel } from '@/components/race/race-hub-panel';
 import { colors } from '@/theme/colors';
 import { radius, spacing } from '@/theme/spacing';
@@ -20,8 +18,9 @@ import { typography } from '@/theme/typography';
 export default function RaceDetailsScreen() {
   const round = Number(useLocalSearchParams<{ round: string }>().round);
   const [driverNumber, setDriverNumber] = useState<number>();
+  const [lapNumber, setLapNumber] = useState<number>();
   const query = useQuery(queries.raceResult(round));
-  const hubQuery = useQuery(queries.raceHub(round, driverNumber));
+  const hubQuery = useQuery(queries.raceHub(round, driverNumber, lapNumber));
   const race = query.data;
 
   return (
@@ -47,17 +46,17 @@ export default function RaceDetailsScreen() {
         </Card>
 
         {hubQuery.isLoading ? <Card style={styles.hubState}><Text style={typography.muted}>Preparing circuit and driver data…</Text></Card> : null}
-        {hubQuery.data ? <RaceHubPanel hub={hubQuery.data} onSelectDriver={setDriverNumber} /> : null}
+        {hubQuery.data ? <RaceHubPanel hub={hubQuery.data}
+          selectedDriverNumber={driverNumber ?? hubQuery.data.selected_driver_number}
+          selectedLapNumber={lapNumber ?? hubQuery.data.driver_trace_lap}
+          updating={hubQuery.isFetching}
+          onSelectDriver={(number) => { setDriverNumber(number); setLapNumber(undefined); }}
+          onSelectLap={setLapNumber} /> : null}
         {hubQuery.error && !hubQuery.isLoading ? <Card style={styles.hubState}>
           <Text style={styles.unavailable}>Interactive race data is not synchronized yet.</Text>
-          <Text style={typography.muted}>Final classification remains available below.</Text>
+          <Text style={typography.muted}>Synchronize and explicitly link this race to unlock the hub.</Text>
         </Card> : null}
 
-        <SectionTitle aside={`${race.results.length} classified`}>Final classification</SectionTitle>
-        <Card style={styles.results}>
-          {race.results.map((result, index) => <ClassificationRow key={`${result.position}-${result.family_name}`}
-            result={result} divided={index < race.results.length - 1} />)}
-        </Card>
       </> : null}
     </Screen>
   );
@@ -76,7 +75,6 @@ const styles = StyleSheet.create({
   location: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: spacing.xs },
   dateBlock: { alignItems: 'flex-end' },
   date: { color: colors.red, fontFamily: 'BarlowCondensed_700Bold', fontSize: 23 },
-  results: { paddingVertical: spacing.xs },
   hubState: { alignItems: 'center', gap: spacing.xs },
   unavailable: { color: colors.text, fontFamily: 'BarlowCondensed_600SemiBold', fontSize: 17 },
 });

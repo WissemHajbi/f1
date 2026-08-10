@@ -11,6 +11,8 @@ param(
 
     [switch]$IncludeTelemetry,
 
+    [switch]$IncludeBestLapTraces,
+
     [int[]]$DriverNumbers = @(),
 
     [string]$TelemetryFrom,
@@ -40,6 +42,9 @@ foreach ($entry in $RaceSessionLinks.GetEnumerator()) {
     if ($SessionKeys -notcontains [int]$entry.Value) {
         throw "RaceSessionLinks session $($entry.Value) must be included in SessionKeys."
     }
+}
+if ($IncludeBestLapTraces -and $SessionKeys.Count -ne 1) {
+    throw "IncludeBestLapTraces currently requires exactly one SessionKeys value."
 }
 if ($IncludeTelemetry) {
     if ($SessionKeys.Count -ne 1) {
@@ -120,6 +125,22 @@ try {
         }
     }
 
+    if ($IncludeBestLapTraces) {
+        $sessionKey = $SessionKeys[0]
+        $userAgent = if ($env:UPSTREAM_USER_AGENT) { $env:UPSTREAM_USER_AGENT } else { "oidysts/0.1" }
+        $traceDrivers = $DriverNumbers
+        if ($traceDrivers.Count -eq 0) {
+            Write-Host "Discovering drivers for best-lap traces..." -ForegroundColor Green
+            $driverRows = Invoke-RestMethod -Uri "https://api.openf1.org/v1/drivers?session_key=$sessionKey" -UserAgent $userAgent
+            $traceDrivers = @($driverRows | ForEach-Object { [int]$_.driver_number } | Sort-Object -Unique)
+            if ($traceDrivers.Count -eq 0) { throw "OpenF1 returned no session drivers." }
+            Start-Sleep -Milliseconds $ThrottleMilliseconds
+        }
+        foreach ($driverNumber in $traceDrivers) {
+            Invoke-Sync -SyncArgs @("-resource", "best-lap-location", "-session", "$sessionKey", "-driver", "$driverNumber")
+        }
+    }
+
     if ($IncludeTelemetry) {
         $sessionKey = $SessionKeys[0]
         $userAgent = if ($env:UPSTREAM_USER_AGENT) { $env:UPSTREAM_USER_AGENT } else { "oidysts/0.1" }
@@ -160,7 +181,7 @@ try {
 
     Write-Host "`nDatabase synchronization completed successfully." -ForegroundColor Green
     if (-not $IncludeTelemetry) {
-        Write-Host "High-volume car-data/location were skipped. Re-run with -IncludeTelemetry to discover drivers/times and cache them." -ForegroundColor Yellow
+        Write-Host "Full-session car-data/location were skipped. Use -IncludeTelemetry for complete traces or -IncludeBestLapTraces for bounded best-lap geometry." -ForegroundColor Yellow
     }
 }
 finally {

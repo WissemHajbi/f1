@@ -19,18 +19,19 @@ import (
 
 func main() {
 	var resource, fromValue, toValue string
-	var year, round, sessionKey, driverNumber int
-	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, classifications, race-link, laps, stints, pit, weather, race-control, overtakes, positions, intervals, location, team-radio, or car-data")
+	var year, round, sessionKey, driverNumber, lapNumber int
+	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, classifications, race-link, laps, best-lap-location, lap-location, stints, pit, weather, race-control, overtakes, positions, intervals, location, team-radio, or car-data")
 	flag.IntVar(&year, "year", 2025, "season to sync")
 	flag.IntVar(&round, "round", 0, "Jolpica championship round for race-link")
 	flag.IntVar(&sessionKey, "session", 0, "OpenF1 session key for bounded resources")
 	flag.IntVar(&driverNumber, "driver", 0, "driver number for bounded resources")
+	flag.IntVar(&lapNumber, "lap", 0, "lap number for lap-location")
 	flag.StringVar(&fromValue, "from", "", "inclusive RFC3339 range start")
 	flag.StringVar(&toValue, "to", "", "exclusive RFC3339 range end")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "classifications" && resource != "race-link" && resource != "laps" && resource != "stints" && resource != "pit" && resource != "weather" && resource != "race-control" && resource != "overtakes" && resource != "positions" && resource != "intervals" && resource != "location" && resource != "team-radio" && resource != "car-data" {
+	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "classifications" && resource != "race-link" && resource != "laps" && resource != "best-lap-location" && resource != "lap-location" && resource != "stints" && resource != "pit" && resource != "weather" && resource != "race-control" && resource != "overtakes" && resource != "positions" && resource != "intervals" && resource != "location" && resource != "team-radio" && resource != "car-data" {
 		logger.Error("unsupported resource", "resource", resource)
 		os.Exit(2)
 	}
@@ -62,6 +63,10 @@ func main() {
 		err = syncRaceLink(ctx, db, year, round, sessionKey)
 	case "laps":
 		err = syncLaps(ctx, db, upstream, sessionKey, driverNumber)
+	case "best-lap-location":
+		err = syncBestLapLocation(ctx, db, upstream, sessionKey, driverNumber)
+	case "lap-location":
+		err = syncLapLocation(ctx, db, upstream, sessionKey, driverNumber, lapNumber)
 	case "stints":
 		err = syncStints(ctx, db, upstream, sessionKey, driverNumber)
 	case "pit":
@@ -358,6 +363,66 @@ func syncTeamRadio(ctx context.Context, db *store.Store, upstream *fetch.Client,
 	}
 	fmt.Printf("SYNC team-radio session=%d driver=%s records=%d downloaded=%d cached=%d\n",
 		sessionKey, driverLabel(driver), len(result.Records), downloaded, cached)
+	return nil
+}
+
+func syncBestLapLocation(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int) error {
+	if sessionKey <= 0 || driverNumber <= 0 {
+		return fmt.Errorf("best-lap-location requires positive -session and -driver")
+	}
+	lap, from, to, err := db.BestLapWindow(ctx, sessionKey, driverNumber)
+	if err != nil {
+		return err
+	}
+	result, err := openf1.New(upstream).Location(ctx, sessionKey, driverNumber, from, to)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertLocation(ctx, result.Samples, syncedAt); err != nil {
+		return err
+	}
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "best_lap_location_sync", Endpoint: result.Endpoint,
+		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Samples),
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key": sessionKey, "driver_number": driverNumber, "lap_number": lap,
+			"from": from, "to": to, "samples": len(result.Samples),
+		}), Payload: result.Payload,
+	}); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC best-lap-location session=%d driver=%d lap=%d samples=%d\n", sessionKey, driverNumber, lap, len(result.Samples))
+	return nil
+}
+
+func syncLapLocation(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber, lapNumber int) error {
+	if sessionKey <= 0 || driverNumber <= 0 || lapNumber <= 0 {
+		return fmt.Errorf("lap-location requires positive -session, -driver, and -lap")
+	}
+	from, to, err := db.LapWindow(ctx, sessionKey, driverNumber, lapNumber)
+	if err != nil {
+		return err
+	}
+	result, err := openf1.New(upstream).Location(ctx, sessionKey, driverNumber, from, to)
+	if err != nil {
+		return err
+	}
+	syncedAt := time.Now().UTC()
+	if err := db.UpsertLocation(ctx, result.Samples, syncedAt); err != nil {
+		return err
+	}
+	if err := db.Save(ctx, store.Snapshot{
+		Source: "openf1", Resource: "lap_location_sync", Endpoint: result.Endpoint,
+		FetchedAt: syncedAt, StatusCode: 200, ContentType: "application/json", RecordCount: len(result.Samples),
+		PayloadBytes: len(result.Payload), Summary: mustJSON(map[string]any{
+			"session_key": sessionKey, "driver_number": driverNumber, "lap_number": lapNumber,
+			"from": from, "to": to, "samples": len(result.Samples),
+		}), Payload: result.Payload,
+	}); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC lap-location session=%d driver=%d lap=%d samples=%d\n", sessionKey, driverNumber, lapNumber, len(result.Samples))
 	return nil
 }
 

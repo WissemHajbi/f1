@@ -98,6 +98,15 @@ export type RaceLapStat = {
   is_pit_out_lap: boolean;
 };
 
+export type TeamRadio = {
+  id: string;
+  timestamp: string;
+  session_key: number;
+  meeting_key: number;
+  driver_number: number;
+  audio_url: string;
+};
+
 export type RaceHub = {
   season: number;
   round: number;
@@ -105,7 +114,9 @@ export type RaceHub = {
   drivers: RaceDriverStats[];
   selected_driver_number: number;
   laps: RaceLapStat[];
-  track: { x: number; y: number }[];
+  track: { x: number; y: number; timestamp?: string }[];
   track_source_driver?: number;
   track_source_lap?: number;
+  driver_trace: { x: number; y: number; timestamp?: string }[];
+  driver_trace_lap?: number;
 };
