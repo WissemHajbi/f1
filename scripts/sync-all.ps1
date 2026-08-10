@@ -7,6 +7,8 @@ param(
     [ValidateNotNullOrEmpty()]
     [int[]]$SessionKeys,
 
+    [hashtable]$RaceSessionLinks = @{},
+
     [switch]$IncludeTelemetry,
 
     [int[]]$DriverNumbers = @(),
@@ -27,6 +29,17 @@ $styles = [System.Globalization.DateTimeStyles]::AssumeUniversal
 
 if ($SessionKeys.Count -eq 0 -or ($SessionKeys | Where-Object { $_ -le 0 })) {
     throw "SessionKeys must contain positive OpenF1 session keys."
+}
+if ($RaceSessionLinks.Count -eq 0 -and $Season -eq 2025 -and $SessionKeys -contains 9839) {
+    $RaceSessionLinks = @{ 24 = 9839 }
+}
+foreach ($entry in $RaceSessionLinks.GetEnumerator()) {
+    if ([int]$entry.Key -le 0 -or [int]$entry.Value -le 0) {
+        throw "RaceSessionLinks must map positive rounds to positive session keys."
+    }
+    if ($SessionKeys -notcontains [int]$entry.Value) {
+        throw "RaceSessionLinks session $($entry.Value) must be included in SessionKeys."
+    }
 }
 if ($IncludeTelemetry) {
     if ($SessionKeys.Count -ne 1) {
@@ -92,6 +105,10 @@ try {
     # Complete season-wide Jolpica datasets.
     foreach ($resource in @("drivers", "calendar", "standings", "results", "classifications")) {
         Invoke-Sync -SyncArgs @("-resource", $resource, "-year", "$Season")
+    }
+
+    foreach ($entry in $RaceSessionLinks.GetEnumerator()) {
+        Invoke-Sync -SyncArgs @("-resource", "race-link", "-year", "$Season", "-round", "$($entry.Key)", "-session", "$($entry.Value)")
     }
 
     foreach ($sessionKey in $SessionKeys) {

@@ -27,4 +27,10 @@ export const queries = {
     staleTime: 60 * 60_000,
     enabled: Number.isInteger(round) && round > 0,
   }),
+  raceHub: (round: number, driverNumber?: number, season = DEFAULT_SEASON) => ({
+    queryKey: ['race-hub', season, round, driverNumber ?? 'default'],
+    queryFn: () => api.raceHub(round, driverNumber, season),
+    staleTime: 10 * 60_000,
+    enabled: Number.isInteger(round) && round > 0,
+  }),
 };

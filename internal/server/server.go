@@ -32,6 +32,7 @@ func New(db *store.Store, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /v1/standings/constructors", s.constructorStandings)
 	mux.HandleFunc("GET /v1/results", s.results)
 	mux.HandleFunc("GET /v1/results/latest", s.latestResult)
+	mux.HandleFunc("GET /v1/race-hub", s.raceHub)
 	mux.HandleFunc("GET /v1/classifications", s.classifications)
 	mux.HandleFunc("GET /v1/meetings", s.meetings)
 	mux.HandleFunc("GET /v1/sessions", s.sessions)
@@ -104,6 +105,35 @@ func (s *Server) drivers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": roster.Drivers, "meta": map[string]any{
 		"season": roster.Session.Year, "session": roster.Session, "synced_at": roster.SyncedAt,
 	}})
+}
+
+func (s *Server) raceHub(w http.ResponseWriter, r *http.Request) {
+	season, err := requestedSeason(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	round, err := positiveQueryInt(r, "round")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	driver, err := optionalPositiveInt(r, "driver_number")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	hub, err := s.store.RaceHub(r.Context(), season, round, driver)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "race hub is not available for the requested race or driver"})
+		return
+	}
+	if err != nil {
+		s.logger.Error("race hub", "season", season, "round", round, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": hub})
 }
 
 func (s *Server) sessionTimeline(w http.ResponseWriter, r *http.Request) {

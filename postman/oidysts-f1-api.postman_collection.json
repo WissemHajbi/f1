@@ -232,6 +232,23 @@
           }
         },
         {
+          "name": "Interactive Race Hub",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/race-hub?season={{season}}&round={{round}}",
+              "host": ["{{baseUrl}}"], "path": ["v1", "race-hub"],
+              "query": [
+                { "key": "season", "value": "{{season}}", "description": "Required synchronized season." },
+                { "key": "round", "value": "{{round}}", "description": "Required round with an explicit OpenF1 session link." },
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional selected driver; defaults to the first classified driver.", "disabled": true }
+              ]
+            },
+            "description": "Returns the explicit session link, driver race statistics, selected-driver laps, and a locally generated downsampled circuit trace."
+          }
+        },
+        {
           "name": "Qualifying Classifications",
           "request": {
             "method": "GET",

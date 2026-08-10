@@ -9,10 +9,10 @@ The validated MVP is intentionally narrow:
 - Home: latest result and championship leaders
 - Calendar: complete synchronized season schedule
 - Standings: driver and constructor classification
-- Race Details: circuit summary and final classification, opened from Calendar
+- Race Hub: circuit summary, final classification, locally generated track shape, driver selector, race statistics, and fastest laps
 - Drivers: searchable synchronized grid and simple driver profiles
 
-Team radio, timelines, and track replay are intentionally deferred. They will be added one vertical feature at a time.
+Radio playback, event timelines, and animated track replay are intentionally deferred. The first interactive hub is available for the explicitly linked Abu Dhabi 2025 race; other races retain classification until their session data and link are synchronized. They will be added one vertical feature at a time.
 
 ## Start
 

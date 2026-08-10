@@ -205,6 +205,17 @@ CREATE TABLE IF NOT EXISTS openf1_sessions (
 CREATE INDEX IF NOT EXISTS idx_openf1_sessions_meeting_date ON openf1_sessions(meeting_key, date_start);
 CREATE INDEX IF NOT EXISTS idx_openf1_sessions_year_date ON openf1_sessions(year, date_start);
 
+CREATE TABLE IF NOT EXISTS race_session_links (
+    season      INTEGER NOT NULL,
+    round       INTEGER NOT NULL,
+    session_key INTEGER NOT NULL REFERENCES openf1_sessions(session_key) ON DELETE CASCADE,
+    source      TEXT NOT NULL,
+    linked_at   TEXT NOT NULL,
+    PRIMARY KEY (season, round),
+    UNIQUE (session_key),
+    FOREIGN KEY (season, round) REFERENCES events(season, round) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS car_data_samples (
     session_key  INTEGER NOT NULL REFERENCES openf1_sessions(session_key) ON DELETE CASCADE,
     driver_number INTEGER NOT NULL,

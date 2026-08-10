@@ -72,3 +72,40 @@ export type Driver = {
   last_name: string;
   country_code?: string | null;
 };
+
+export type RaceDriverStats = {
+  driver: Driver;
+  completed_laps: number;
+  best_lap_number?: number;
+  best_lap_duration?: number;
+  best_sector_1?: number;
+  best_sector_2?: number;
+  best_sector_3?: number;
+  top_speed?: number;
+  pit_stops: number;
+  stints: number;
+  overtakes: number;
+  radio_messages: number;
+};
+
+export type RaceLapStat = {
+  lap_number: number;
+  duration?: number;
+  sector_1_duration?: number;
+  sector_2_duration?: number;
+  sector_3_duration?: number;
+  speed_trap?: number;
+  is_pit_out_lap: boolean;
+};
+
+export type RaceHub = {
+  season: number;
+  round: number;
+  session_key: number;
+  drivers: RaceDriverStats[];
+  selected_driver_number: number;
+  laps: RaceLapStat[];
+  track: { x: number; y: number }[];
+  track_source_driver?: number;
+  track_source_lap?: number;
+};

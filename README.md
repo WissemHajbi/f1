@@ -17,7 +17,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts/sync-all.ps1 `
   -SessionKeys 9839
 ```
 
-This synchronizes meetings, drivers, calendar, standings, results, classifications, laps, stints, pits, weather, race control, overtakes, positions, intervals, and locally cached team radio. It is idempotent and safe to rerun after interruption.
+This synchronizes meetings, drivers, calendar, standings, results, classifications, laps, stints, pits, weather, race control, overtakes, positions, intervals, and locally cached team radio. For season 2025/session 9839 it also persists the known round 24 race-session link. It is idempotent and safe to rerun after interruption.
 
 High-volume car data and physical location are opt-in and automatically divided into 15-minute chunks:
 
@@ -32,7 +32,7 @@ With `-IncludeTelemetry`, the script discovers all session drivers and session s
 
 ## Run the mobile app
 
-The Expo TypeScript client lives in `mobile/`. Its controlled scope includes Home, Calendar, Standings, minimal Race Details, and searchable driver profiles.
+The Expo TypeScript client lives in `mobile/`. Its controlled scope includes Home, Calendar, Standings, searchable driver profiles, and a Race Hub with locally generated circuit geometry and selectable driver statistics.
 
 ```powershell
 go run ./cmd/api
@@ -65,6 +65,7 @@ go run ./cmd/sync -resource calendar -year 2026
 go run ./cmd/sync -resource standings -year 2025
 go run ./cmd/sync -resource results -year 2025
 go run ./cmd/sync -resource classifications -year 2025
+go run ./cmd/sync -resource race-link -year 2025 -round 24 -session 9839
 go run ./cmd/sync -resource laps -session 9839
 go run ./cmd/sync -resource stints -session 9839
 go run ./cmd/sync -resource pit -session 9839
@@ -78,7 +79,7 @@ go run ./cmd/sync -resource team-radio -session 9839 -driver 1
 go run ./cmd/sync -resource car-data -session 9839 -driver 1 -from 2025-12-07T13:00:00Z -to 2025-12-07T13:01:00Z
 ```
 
-Calendar sync replaces one season atomically, preventing clients from seeing a partially updated schedule.
+Calendar sync atomically upserts a season and removes stale rounds without deleting persisted race-session links. For other races, pass explicit links to the bootstrap script with `-RaceSessionLinks @{ 24 = 9839 }`.
 
 ## Run API
 
@@ -97,6 +98,7 @@ curl "http://localhost:8080/v1/standings/constructors?season=2025"
 curl "http://localhost:8080/v1/results?season=2025"
 curl "http://localhost:8080/v1/results?season=2025&round=24"
 curl http://localhost:8080/v1/results/latest
+curl "http://localhost:8080/v1/race-hub?season=2025&round=24&driver_number=1"
 curl "http://localhost:8080/v1/classifications?season=2025&type=qualifying"
 curl "http://localhost:8080/v1/classifications?season=2025&type=sprint&round=23"
 curl "http://localhost:8080/v1/laps?session_key=9839"

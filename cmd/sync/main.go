@@ -19,9 +19,10 @@ import (
 
 func main() {
 	var resource, fromValue, toValue string
-	var year, sessionKey, driverNumber int
-	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, classifications, laps, stints, pit, weather, race-control, overtakes, positions, intervals, location, team-radio, or car-data")
+	var year, round, sessionKey, driverNumber int
+	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, classifications, race-link, laps, stints, pit, weather, race-control, overtakes, positions, intervals, location, team-radio, or car-data")
 	flag.IntVar(&year, "year", 2025, "season to sync")
+	flag.IntVar(&round, "round", 0, "Jolpica championship round for race-link")
 	flag.IntVar(&sessionKey, "session", 0, "OpenF1 session key for bounded resources")
 	flag.IntVar(&driverNumber, "driver", 0, "driver number for bounded resources")
 	flag.StringVar(&fromValue, "from", "", "inclusive RFC3339 range start")
@@ -29,7 +30,7 @@ func main() {
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "classifications" && resource != "laps" && resource != "stints" && resource != "pit" && resource != "weather" && resource != "race-control" && resource != "overtakes" && resource != "positions" && resource != "intervals" && resource != "location" && resource != "team-radio" && resource != "car-data" {
+	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "classifications" && resource != "race-link" && resource != "laps" && resource != "stints" && resource != "pit" && resource != "weather" && resource != "race-control" && resource != "overtakes" && resource != "positions" && resource != "intervals" && resource != "location" && resource != "team-radio" && resource != "car-data" {
 		logger.Error("unsupported resource", "resource", resource)
 		os.Exit(2)
 	}
@@ -57,6 +58,8 @@ func main() {
 		err = syncResults(ctx, db, upstream, year)
 	case "classifications":
 		err = syncClassifications(ctx, db, upstream, year)
+	case "race-link":
+		err = syncRaceLink(ctx, db, year, round, sessionKey)
 	case "laps":
 		err = syncLaps(ctx, db, upstream, sessionKey, driverNumber)
 	case "stints":
@@ -84,6 +87,14 @@ func main() {
 		logger.Error("sync failed", "resource", resource, "year", year, "error", err)
 		os.Exit(1)
 	}
+}
+
+func syncRaceLink(ctx context.Context, db *store.Store, season, round, sessionKey int) error {
+	if err := db.UpsertRaceSessionLink(ctx, season, round, sessionKey, time.Now().UTC()); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC race-link season=%d round=%d session=%d\n", season, round, sessionKey)
+	return nil
 }
 
 func syncOvertakes(ctx context.Context, db *store.Store, upstream *fetch.Client, sessionKey, driverNumber int) error {

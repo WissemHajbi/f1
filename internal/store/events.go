@@ -5,25 +5,34 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"oidysts/internal/domain"
 )
 
 func (s *Store) ReplaceCalendar(ctx context.Context, season int, events []domain.Event) error {
+	if len(events) == 0 {
+		return fmt.Errorf("calendar events cannot be empty")
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin calendar transaction: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM events WHERE season=?`, season); err != nil {
-		return fmt.Errorf("clear calendar: %w", err)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM event_sessions WHERE season=?`, season); err != nil {
+		return fmt.Errorf("clear calendar sessions: %w", err)
 	}
 	eventStatement, err := tx.PrepareContext(ctx, `
 		INSERT INTO events
 		(season, round, name, source_url, race_at, circuit_id, circuit_name, locality, country,
 		 latitude, longitude, source, synced_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'jolpica', ?)
+		ON CONFLICT(season, round) DO UPDATE SET
+			name=excluded.name, source_url=excluded.source_url, race_at=excluded.race_at,
+			circuit_id=excluded.circuit_id, circuit_name=excluded.circuit_name,
+			locality=excluded.locality, country=excluded.country, latitude=excluded.latitude,
+			longitude=excluded.longitude, source=excluded.source, synced_at=excluded.synced_at
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare event insert: %w", err)
@@ -56,6 +65,15 @@ func (s *Store) ReplaceCalendar(ctx context.Context, season int, events []domain
 				return fmt.Errorf("insert %s for round %d: %w", session.Type, event.Round, err)
 			}
 		}
+	}
+	args := make([]any, 0, len(events)+1)
+	args = append(args, season)
+	for _, event := range events {
+		args = append(args, event.Round)
+	}
+	deleteStale := `DELETE FROM events WHERE season=? AND round NOT IN (` + strings.TrimRight(strings.Repeat("?,", len(events)), ",") + `)`
+	if _, err := tx.ExecContext(ctx, deleteStale, args...); err != nil {
+		return fmt.Errorf("delete stale calendar events: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit calendar: %w", err)
