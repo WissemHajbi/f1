@@ -10,8 +10,9 @@ The validated MVP is intentionally narrow:
 - Calendar: complete synchronized season schedule
 - Standings: driver and constructor classification
 - Race Details: circuit summary and final classification, opened from Calendar
+- Drivers: searchable synchronized grid and simple driver profiles
 
-Drivers, team radio, timelines, and track replay are intentionally deferred. They will be added one vertical feature at a time.
+Team radio, timelines, and track replay are intentionally deferred. They will be added one vertical feature at a time.
 
 ## Start
 

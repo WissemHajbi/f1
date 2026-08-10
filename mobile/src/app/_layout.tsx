@@ -26,6 +26,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'slide_from_right' }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="race/[round]" />
+          <Stack.Screen name="driver/[number]" />
         </Stack>
       </QueryClientProvider>
     </SafeAreaProvider>

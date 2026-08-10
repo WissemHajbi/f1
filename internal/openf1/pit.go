@@ -61,8 +61,10 @@ func (c *Client) PitStops(ctx context.Context, sessionKey int, driverNumber *int
 		if item.Duration != nil && *item.Duration < 0 {
 			return PitStopsResult{}, fmt.Errorf("negative duration at index %d", index)
 		}
-		items = append(items, domain.PitStop{SessionKey: item.SessionKey, MeetingKey: item.MeetingKey,
-			DriverNumber: item.DriverNumber, LapNumber: item.LapNumber, Timestamp: item.Date.UTC(), Duration: item.Duration})
+		items = append(items, domain.PitStop{
+			SessionKey: item.SessionKey, MeetingKey: item.MeetingKey,
+			DriverNumber: item.DriverNumber, LapNumber: item.LapNumber, Timestamp: item.Date.UTC(), Duration: item.Duration,
+		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Timestamp.Before(items[j].Timestamp) })
 	return PitStopsResult{PitStops: items, Endpoint: endpoint, Payload: response.Body}, nil

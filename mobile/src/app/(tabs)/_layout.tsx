@@ -24,6 +24,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: icon('flag-checkered') }} />
       <Tabs.Screen name="calendar" options={{ title: 'Calendar', tabBarIcon: icon('calendar-blank-outline') }} />
       <Tabs.Screen name="standings" options={{ title: 'Standings', tabBarIcon: icon('podium') }} />
+      <Tabs.Screen name="drivers" options={{ title: 'Drivers', tabBarIcon: icon('account-group-outline') }} />
     </Tabs>
   );
 }

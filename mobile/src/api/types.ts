@@ -59,3 +59,16 @@ export type RaceClassification = {
   circuit: Circuit;
   results: RaceResult[];
 };
+
+export type Driver = {
+  session_key: number;
+  driver_number: number;
+  broadcast_name: string;
+  full_name: string;
+  name_acronym: string;
+  team_name: string;
+  team_colour: string;
+  first_name: string;
+  last_name: string;
+  country_code?: string | null;
+};

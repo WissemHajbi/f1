@@ -32,7 +32,7 @@ With `-IncludeTelemetry`, the script discovers all session drivers and session s
 
 ## Run the mobile app
 
-The Expo TypeScript client lives in `mobile/`. Its controlled scope includes Home, Calendar, Standings, and a minimal final-classification Race Details screen.
+The Expo TypeScript client lives in `mobile/`. Its controlled scope includes Home, Calendar, Standings, minimal Race Details, and searchable driver profiles.
 
 ```powershell
 go run ./cmd/api

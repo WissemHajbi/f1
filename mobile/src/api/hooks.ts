@@ -6,6 +6,11 @@ export const queries = {
     queryFn: () => api.calendar(season),
     staleTime: 60 * 60_000,
   }),
+  drivers: (season = DEFAULT_SEASON) => ({
+    queryKey: ['drivers', season],
+    queryFn: () => api.drivers(season),
+    staleTime: 60 * 60_000,
+  }),
   driverStandings: (season = DEFAULT_SEASON) => ({
     queryKey: ['standings', 'drivers', season],
     queryFn: () => api.driverStandings(season),

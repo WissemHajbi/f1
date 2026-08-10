@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import type { ApiEnvelope, CalendarEvent, ConstructorStanding, DriverStanding, RaceClassification } from './types';
+import type { ApiEnvelope, CalendarEvent, ConstructorStanding, Driver, DriverStanding, RaceClassification } from './types';
 
 const localURL = Platform.select({ android: 'http://10.0.2.2:8080', default: 'http://localhost:8080' });
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || localURL).replace(/\/$/, '');
@@ -34,6 +34,8 @@ const seasonQuery = (season: number) => `?season=${encodeURIComponent(season)}`;
 export const api = {
   calendar: (season = DEFAULT_SEASON) =>
     get<ApiEnvelope<CalendarEvent[]>>(`/v1/calendar${seasonQuery(season)}`).then((value) => value.data),
+  drivers: (season = DEFAULT_SEASON) =>
+    get<ApiEnvelope<Driver[]>>(`/v1/drivers${seasonQuery(season)}`).then((value) => value.data),
   driverStandings: (season = DEFAULT_SEASON) =>
     get<ApiEnvelope<DriverStanding[]>>(`/v1/standings/drivers${seasonQuery(season)}`).then((value) => value.data),
   constructorStandings: (season = DEFAULT_SEASON) =>
