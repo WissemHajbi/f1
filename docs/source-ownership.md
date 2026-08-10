@@ -7,6 +7,7 @@ The backend does not merge duplicate classifications. Each resource has one auth
 | Calendar, race results, qualifying, sprint, championship standings | Jolpica |
 | Practice classifications (when implemented) | OpenF1 |
 | Meetings/session keys, laps, telemetry, stints, pits, weather, race control | OpenF1 |
+| Attributed geographic circuit centerlines | OpenStreetMap (ODbL) |
 
 Rules:
 
@@ -15,5 +16,6 @@ Rules:
 3. Keep provider references and `source` metadata in storage.
 4. Historical availability is explicit: OpenF1 detail generally starts in 2023.
 5. The API presents stable application models, while provider adapters remain isolated.
+6. OpenStreetMap centerlines are cached locally and may be buffered only as estimated visual width; they are not official asphalt boundaries.
 
 This policy prevents conflict resolution, silent overwrites, and source-dependent frontend behavior.

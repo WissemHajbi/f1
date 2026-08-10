@@ -64,6 +64,10 @@ type RaceHub struct {
 	Track                []TrackPoint      `json:"track"`
 	TrackSourceDriver    *int              `json:"track_source_driver,omitempty"`
 	TrackSourceLap       *int              `json:"track_source_lap,omitempty"`
+	TrackEstimatedWidthM *float64          `json:"track_estimated_width_m,omitempty"`
+	TrackAttribution     string            `json:"track_attribution,omitempty"`
+	TrackSourceURL       string            `json:"track_source_url,omitempty"`
+	TrackAccuracy        string            `json:"track_accuracy,omitempty"`
 	DriverTrace          []TrackPoint      `json:"driver_trace"`
 	DriverTraceLap       *int              `json:"driver_trace_lap,omitempty"`
 }

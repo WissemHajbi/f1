@@ -242,7 +242,8 @@
               "query": [
                 { "key": "season", "value": "{{season}}", "description": "Required synchronized season." },
                 { "key": "round", "value": "{{round}}", "description": "Required round with an explicit OpenF1 session link." },
-                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional selected driver; defaults to the first classified driver.", "disabled": true }
+                { "key": "driver_number", "value": "{{driverNumber}}", "description": "Optional selected driver; defaults to the first classified driver.", "disabled": true },
+                { "key": "lap_number", "value": "{{lapNumber}}", "description": "Optional selected lap location trace; requires a selected or default driver and a synchronized lap-location window.", "disabled": true }
               ]
             },
             "description": "Returns the explicit session link, driver race statistics, selected-driver laps, and a locally generated downsampled circuit trace."

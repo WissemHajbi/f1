@@ -18,9 +18,9 @@ import (
 )
 
 func main() {
-	var resource, fromValue, toValue string
+	var resource, fromValue, toValue, geometryFile string
 	var year, round, sessionKey, driverNumber, lapNumber int
-	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, classifications, race-link, laps, best-lap-location, lap-location, stints, pit, weather, race-control, overtakes, positions, intervals, location, team-radio, or car-data")
+	flag.StringVar(&resource, "resource", "drivers", "resource to sync: drivers, meetings, calendar, standings, results, classifications, race-link, circuit-geometry, laps, best-lap-location, lap-location, stints, pit, weather, race-control, overtakes, positions, intervals, location, team-radio, or car-data")
 	flag.IntVar(&year, "year", 2025, "season to sync")
 	flag.IntVar(&round, "round", 0, "Jolpica championship round for race-link")
 	flag.IntVar(&sessionKey, "session", 0, "OpenF1 session key for bounded resources")
@@ -28,10 +28,11 @@ func main() {
 	flag.IntVar(&lapNumber, "lap", 0, "lap number for lap-location")
 	flag.StringVar(&fromValue, "from", "", "inclusive RFC3339 range start")
 	flag.StringVar(&toValue, "to", "", "exclusive RFC3339 range end")
+	flag.StringVar(&geometryFile, "file", "", "local circuit geometry JSON file")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "classifications" && resource != "race-link" && resource != "laps" && resource != "best-lap-location" && resource != "lap-location" && resource != "stints" && resource != "pit" && resource != "weather" && resource != "race-control" && resource != "overtakes" && resource != "positions" && resource != "intervals" && resource != "location" && resource != "team-radio" && resource != "car-data" {
+	if resource != "drivers" && resource != "meetings" && resource != "calendar" && resource != "standings" && resource != "results" && resource != "classifications" && resource != "race-link" && resource != "circuit-geometry" && resource != "laps" && resource != "best-lap-location" && resource != "lap-location" && resource != "stints" && resource != "pit" && resource != "weather" && resource != "race-control" && resource != "overtakes" && resource != "positions" && resource != "intervals" && resource != "location" && resource != "team-radio" && resource != "car-data" {
 		logger.Error("unsupported resource", "resource", resource)
 		os.Exit(2)
 	}
@@ -61,6 +62,8 @@ func main() {
 		err = syncClassifications(ctx, db, upstream, year)
 	case "race-link":
 		err = syncRaceLink(ctx, db, year, round, sessionKey)
+	case "circuit-geometry":
+		err = syncCircuitGeometry(ctx, db, year, round, sessionKey, geometryFile)
 	case "laps":
 		err = syncLaps(ctx, db, upstream, sessionKey, driverNumber)
 	case "best-lap-location":
@@ -99,6 +102,29 @@ func syncRaceLink(ctx context.Context, db *store.Store, season, round, sessionKe
 		return err
 	}
 	fmt.Printf("SYNC race-link season=%d round=%d session=%d\n", season, round, sessionKey)
+	return nil
+}
+
+func syncCircuitGeometry(ctx context.Context, db *store.Store, season, round, sessionKey int, path string) error {
+	if path == "" {
+		return fmt.Errorf("circuit-geometry requires -file")
+	}
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read circuit geometry: %w", err)
+	}
+	var geometry domain.CircuitGeometry
+	if err := json.Unmarshal(payload, &geometry); err != nil {
+		return fmt.Errorf("decode circuit geometry: %w", err)
+	}
+	if geometry.SessionKey != sessionKey {
+		return fmt.Errorf("geometry session %d does not match -session %d", geometry.SessionKey, sessionKey)
+	}
+	if err := db.UpsertCircuitGeometry(ctx, season, round, geometry, time.Now().UTC()); err != nil {
+		return err
+	}
+	fmt.Printf("SYNC circuit-geometry season=%d round=%d session=%d points=%d attribution=%q\n",
+		season, round, sessionKey, len(geometry.Points), geometry.Attribution)
 	return nil
 }
 

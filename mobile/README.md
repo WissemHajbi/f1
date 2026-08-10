@@ -9,7 +9,7 @@ The validated MVP is intentionally narrow:
 - Home: latest result and championship leaders
 - Calendar: complete synchronized season schedule
 - Standings: driver and constructor classification
-- Race Hub: interactive best-lap marker/trail playback, classification-ordered driver selector, beginner KPI explanations, every-lap timing/sector inspection, pace/strategy views, and locally streamed radio playback
+- Race Hub: zoomable/pannable OSM-attributed circuit context, exact synchronized selected-lap x/y samples, classification-ordered driver selector, beginner KPI explanations, every-lap timing/sector inspection, pace/strategy views, and locally streamed radio playback
 - Drivers: searchable synchronized grid and simple driver profiles
 
 Radio playback, event timelines, and animated track replay are intentionally deferred. The first interactive hub is available for the explicitly linked Abu Dhabi 2025 race; other races retain classification until their session data and link are synchronized. They will be added one vertical feature at a time.

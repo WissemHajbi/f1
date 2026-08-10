@@ -117,6 +117,9 @@ func (s *Store) RaceHub(ctx context.Context, season, round int, requestedDriver,
 	if err := s.loadRaceHubTrack(ctx, &hub); err != nil {
 		return domain.RaceHub{}, err
 	}
+	if err := s.loadCircuitGeometry(ctx, &hub); err != nil {
+		return domain.RaceHub{}, err
+	}
 	if err := s.loadRaceHubDriverTrace(ctx, &hub, requestedLap); err != nil {
 		return domain.RaceHub{}, err
 	}

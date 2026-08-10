@@ -39,6 +39,11 @@ func TestRaceSessionLinkSurvivesCalendarRefresh(t *testing.T) {
 	if err := db.UpsertRaceSessionLink(ctx, 2025, 24, 9839, now); err != nil {
 		t.Fatal(err)
 	}
+	geometry := domain.CircuitGeometry{SessionKey: 9839, Points: []domain.TrackPoint{{X: 1, Y: 2}, {X: 3, Y: 4}, {X: 1, Y: 2}},
+		EstimatedWidthM: 12, Attribution: "© OpenStreetMap contributors", SourceURL: "https://www.openstreetmap.org/copyright", GeometryAccuracy: "estimated"}
+	if err := db.UpsertCircuitGeometry(ctx, 2025, 24, geometry, now); err != nil {
+		t.Fatal(err)
+	}
 	events[0].Name = "Updated Grand Prix"
 	if err := db.ReplaceCalendar(ctx, 2025, events); err != nil {
 		t.Fatal(err)
@@ -49,6 +54,13 @@ func TestRaceSessionLinkSurvivesCalendarRefresh(t *testing.T) {
 	}
 	if sessionKey != 9839 {
 		t.Fatalf("session key=%d", sessionKey)
+	}
+	var geometryCount int
+	if err := db.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM circuit_geometries WHERE season=2025 AND round=24`).Scan(&geometryCount); err != nil {
+		t.Fatal(err)
+	}
+	if geometryCount != 1 {
+		t.Fatalf("geometry count=%d", geometryCount)
 	}
 }
 

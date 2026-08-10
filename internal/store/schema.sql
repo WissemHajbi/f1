@@ -216,6 +216,21 @@ CREATE TABLE IF NOT EXISTS race_session_links (
     FOREIGN KEY (season, round) REFERENCES events(season, round) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS circuit_geometries (
+    season            INTEGER NOT NULL,
+    round             INTEGER NOT NULL,
+    session_key       INTEGER NOT NULL REFERENCES openf1_sessions(session_key) ON DELETE CASCADE,
+    points            BLOB NOT NULL,
+    estimated_width_m REAL NOT NULL,
+    attribution       TEXT NOT NULL,
+    source_url        TEXT NOT NULL,
+    geometry_accuracy TEXT NOT NULL,
+    source            TEXT NOT NULL,
+    synced_at         TEXT NOT NULL,
+    PRIMARY KEY (season, round),
+    FOREIGN KEY (season, round) REFERENCES race_session_links(season, round) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS car_data_samples (
     session_key  INTEGER NOT NULL REFERENCES openf1_sessions(session_key) ON DELETE CASCADE,
     driver_number INTEGER NOT NULL,

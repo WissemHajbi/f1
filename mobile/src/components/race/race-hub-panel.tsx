@@ -33,7 +33,8 @@ export function RaceHubPanel({ hub, selectedDriverNumber, selectedLapNumber, upd
   return <>
     <SectionTitle aside={`Session ${hub.session_key}`}>Circuit</SectionTitle>
     <TrackMap points={hub.track} trace={traceReady ? hub.driver_trace : []} traceColor={accent}
-      sourceLap={hub.track_source_lap} traceLap={traceReady ? hub.driver_trace_lap : activeLap} />
+      sourceLap={hub.track_source_lap} traceLap={traceReady ? hub.driver_trace_lap : activeLap}
+      attribution={hub.track_attribution} accuracy={hub.track_accuracy} estimatedWidth={hub.track_estimated_width_m} />
     {updating && !traceReady ? <Text style={styles.updating}>Loading #{selectedDriverNumber} lap {activeLap} racing line…</Text> : null}
 
     <SectionTitle aside={`${hub.drivers.length} classified`}>Choose driver</SectionTitle>

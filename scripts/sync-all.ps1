@@ -114,6 +114,11 @@ try {
 
     foreach ($entry in $RaceSessionLinks.GetEnumerator()) {
         Invoke-Sync -SyncArgs @("-resource", "race-link", "-year", "$Season", "-round", "$($entry.Key)", "-session", "$($entry.Value)")
+        if ($Season -eq 2025 -and [int]$entry.Key -eq 24 -and [int]$entry.Value -eq 9839) {
+            $geometryFile = Join-Path $repoRoot "data/circuits/yas_marina_openf1.json"
+            Invoke-Sync -SyncArgs @("-resource", "circuit-geometry", "-year", "$Season", "-round", "$($entry.Key)",
+                "-session", "$($entry.Value)", "-file", $geometryFile)
+        }
     }
 
     foreach ($sessionKey in $SessionKeys) {

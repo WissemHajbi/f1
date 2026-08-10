@@ -117,6 +117,10 @@ export type RaceHub = {
   track: { x: number; y: number; timestamp?: string }[];
   track_source_driver?: number;
   track_source_lap?: number;
+  track_estimated_width_m?: number;
+  track_attribution?: string;
+  track_source_url?: string;
+  track_accuracy?: string;
   driver_trace: { x: number; y: number; timestamp?: string }[];
   driver_trace_lap?: number;
 };
